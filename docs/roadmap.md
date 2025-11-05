@@ -1,0 +1,58 @@
+# Roadmap
+
+The plan, in the order it will be built. Each stage ends with something that
+can be checked: the first against dense linear algebra on tiny models, the
+later ones against retraining.
+
+An item moves to "Done" in the commit that lands it.
+
+## Done
+
+- Repository scaffold: packaging, lint, types, tests, CI on CPU wheels.
+
+## Stage 1: exact references on tiny models
+
+- A tiny MLP and a two-layer GPT that can be called functionally.
+- A planted-facts dataset in which the source documents of every fact are
+  known by construction.
+- A deterministic training loop with checkpoints.
+- Per-example gradients two ways: `vmap` over `grad`, and hooks.
+- Dense Hessian and Gauss-Newton matrices as the oracle.
+- Hessian-vector and Gauss-Newton-vector products, checked against the oracle.
+- A matrix-free linear operator, with conjugate gradient and Lanczos solvers.
+- Exact influence functions on the MLP as the reference implementation.
+- A device policy: MPS has no float64, so the error of float32 curvature on
+  the GPU is measured against float64 on the CPU.
+
+## Stage 2: approximations that scale
+
+- K-FAC and EK-FAC, including layers whose weights are shared across
+  sequence positions.
+- TracIn over checkpoints, with gradient dot products that never materialise
+  the gradients.
+- TRAK, with a sparse random projection and a resumable on-disk gradient
+  store.
+- LiSSA, conjugate gradient and low-rank influence as iterative baselines.
+- One `Attributor` interface and a command line over all of them.
+- A custom `autograd.Function` that composes with `grad`, `jvp` and `vmap`.
+- A profiling pass and a baseline table of time and memory.
+
+## Stage 3: ground truth by retraining
+
+- A functional AdamW that matches `torch.optim.AdamW` step for step.
+- Many models trained at once with `vmap`, each on its own subset.
+- The linear datamodeling score and planted-fact recall as metrics.
+- Unrolled differentiation through a whole training run, with checkpointed
+  replay to bound memory.
+- Every method compared on the MLP and then on the small GPT: accuracy
+  against retraining, wall-clock time, peak memory.
+
+## Stage 4: a real model
+
+- LoRA adapters through `torch.nn.utils.parametrize`, fine-tuned on a small
+  open language model.
+- A poisoning experiment: plant a backdoor through fine-tuning examples, then
+  ask each method to find them.
+- A counterfactual check: remove the top-ranked examples, retrain, and see
+  whether the backdoor is gone.
+- A `report` command that rebuilds every table and figure from recorded runs.
