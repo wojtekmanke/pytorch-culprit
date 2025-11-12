@@ -4,18 +4,18 @@ The plan, in the order it will be built. Each stage ends with something that
 can be checked: the first against dense linear algebra on tiny models, the
 later ones against retraining.
 
-An item moves to "Done" in the commit that lands it.
+Items move to "Done" as they land.
 
 ## Done
 
 - Repository scaffold: packaging, lint, types, tests, CI on CPU wheels.
-
-## Stage 1: exact references on tiny models
-
 - A tiny MLP and a two-layer GPT that can be called functionally.
 - A planted-facts dataset in which the source documents of every fact are
   known by construction.
 - A deterministic training loop with checkpoints.
+
+## Stage 1: exact references on tiny models
+
 - Per-example gradients two ways: `vmap` over `grad`, and hooks.
 - Dense Hessian and Gauss-Newton matrices as the oracle.
 - Hessian-vector and Gauss-Newton-vector products, checked against the oracle.

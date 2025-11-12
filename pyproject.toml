@@ -12,6 +12,7 @@ license = "MIT"
 dependencies = [
     "torch>=2.6",
     "numpy",
+    "safetensors",
 ]
 
 [project.optional-dependencies]
