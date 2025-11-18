@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: check test lint types format
+.PHONY: check test lint types format report
 
 check: lint types test
 
@@ -17,3 +17,6 @@ test:
 format:
 	$(PY) -m ruff check --fix .
 	$(PY) -m ruff format .
+
+report:
+	$(PY) -m culprit.report

@@ -13,10 +13,10 @@ Items move to "Done" as they land.
 - A planted-facts dataset in which the source documents of every fact are
   known by construction.
 - A deterministic training loop with checkpoints.
+- Per-example gradients two ways: `vmap` over `grad`, and hooks.
 
 ## Stage 1: exact references on tiny models
 
-- Per-example gradients two ways: `vmap` over `grad`, and hooks.
 - Dense Hessian and Gauss-Newton matrices as the oracle.
 - Hessian-vector and Gauss-Newton-vector products, checked against the oracle.
 - A matrix-free linear operator, with conjugate gradient and Lanczos solvers.

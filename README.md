@@ -14,9 +14,9 @@ with retraining on the same machine.
 
 ## Status
 
-The repository is at its first commit. `docs/roadmap.md` lists what is
-planned and marks what has landed. Nothing here has produced a result yet,
-and this file will only quote numbers that came out of a recorded run.
+`docs/roadmap.md` lists what is planned and marks what has landed. The
+tables under `docs/results/` are built from recorded runs by
+`python -m culprit.report`; no number in this repository is written by hand.
 
 ## Development
 
