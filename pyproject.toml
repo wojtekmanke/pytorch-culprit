@@ -30,6 +30,8 @@ markers = [
     "mps: needs the Apple GPU and is skipped where it is absent",
     "slow: trains for more than a few seconds",
 ]
+# Raised from inside torch.func, not by anything this package calls.
+filterwarnings = ["ignore:.torch.jit.script. is deprecated:FutureWarning"]
 
 [tool.ruff]
 line-length = 100

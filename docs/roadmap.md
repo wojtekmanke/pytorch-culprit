@@ -14,10 +14,11 @@ Items move to "Done" as they land.
   known by construction.
 - A deterministic training loop with checkpoints.
 - Per-example gradients two ways: `vmap` over `grad`, and hooks.
+- Dense Hessian and Gauss-Newton matrices as the oracle. Building it turned
+  up a silent error in `torch.func.hessian`; see `docs/notes/pitfalls.md`.
 
 ## Stage 1: exact references on tiny models
 
-- Dense Hessian and Gauss-Newton matrices as the oracle.
 - Hessian-vector and Gauss-Newton-vector products, checked against the oracle.
 - A matrix-free linear operator, with conjugate gradient and Lanczos solvers.
 - Exact influence functions on the MLP as the reference implementation.
