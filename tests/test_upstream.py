@@ -8,7 +8,7 @@ explains each one.
 
 import pytest
 import torch
-from torch.func import grad, hessian, jacfwd
+from torch.func import grad, hessian, jacfwd, jvp
 from torch.nn import functional as F
 
 
@@ -61,6 +61,60 @@ def test_the_wrong_hessian_block_is_the_one_with_frozen_statistics():
     if torch.allclose(reported, correct, atol=1e-8):
         pytest.skip("this version of torch computes the block correctly")
     assert torch.allclose(reported, frozen, atol=1e-10)
+
+
+def plain_layer_norm_loss(x):
+    """A scalar function of the input of a layer norm that has no parameters at all."""
+    return (F.layer_norm(x, (4,)) * torch.arange(1.0, 5.0)).pow(2).sum()
+
+
+def point_and_direction():
+    generator = torch.Generator().manual_seed(0)
+    return torch.randn(3, 4, generator=generator), torch.randn(3, 4, generator=generator)
+
+
+def test_forward_over_reverse_gives_the_hvp_through_a_layer_norm():
+    x, v = point_and_direction()
+    step = 1e-5
+    gradient = grad(plain_layer_norm_loss)
+    expected = (gradient(x + step * v) - gradient(x - step * v)) / (2 * step)
+    assert torch.allclose(jvp(gradient, (x,), (v,))[1], expected, atol=1e-5)
+
+
+@pytest.mark.xfail(
+    reason="the forward-mode rule of layer norm builds its tangent from the saved mean and "
+    "scale, which reverse mode treats as constants; the library's default Hessian-vector "
+    "product is forward over reverse",
+    strict=False,
+)
+def test_reverse_over_forward_gives_the_hvp_through_a_layer_norm():
+    x, v = point_and_direction()
+    expected = jvp(grad(plain_layer_norm_loss), (x,), (v,))[1]
+    reported = grad(lambda at: jvp(plain_layer_norm_loss, (at,), (v,))[1])(x)
+    assert torch.allclose(reported, expected, atol=1e-8)
+
+
+def test_the_wrong_reverse_over_forward_product_is_the_one_with_frozen_statistics():
+    x, v = point_and_direction()
+    scale = torch.arange(1.0, 5.0)
+
+    def slope_with_frozen_statistics(at):
+        mean = at.mean(-1, keepdim=True).detach()
+        rstd = (at.var(-1, unbiased=False, keepdim=True) + 1e-5).rsqrt().detach()
+        normalised = (at - mean) * rstd
+        centred = v - v.mean(-1, keepdim=True)
+        tangent = (centred - normalised * (normalised * centred).mean(-1, keepdim=True)) * rstd
+        return (2 * F.layer_norm(at, (4,)) * scale * scale * tangent).sum()
+
+    # The hand-written tangent is the true one; only its derivative differs.
+    assert torch.allclose(
+        slope_with_frozen_statistics(x), jvp(plain_layer_norm_loss, (x,), (v,))[1]
+    )
+    reported = grad(lambda at: jvp(plain_layer_norm_loss, (at,), (v,))[1])(x)
+    correct = jvp(grad(plain_layer_norm_loss), (x,), (v,))[1]
+    if torch.allclose(reported, correct, atol=1e-8):
+        pytest.skip("this version of torch computes the product correctly")
+    assert torch.allclose(reported, grad(slope_with_frozen_statistics)(x), atol=1e-10)
 
 
 @pytest.mark.xfail(

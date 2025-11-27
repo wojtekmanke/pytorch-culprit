@@ -56,6 +56,33 @@ models cannot ask for that.
 It was found by the test that compares the dense Hessian with finite
 differences of the gradient, which uses no second-order autograd at all.
 
+## Reverse over forward is wrong through any layer norm
+
+Observed on torch 2.14.1, CPU in float64 and MPS in float32.
+
+A Hessian-vector product can be computed as the gradient of a directional
+derivative: `grad(lambda p: jvp(f, (p,), (v,))[1])`. Through
+`F.layer_norm`, with or without affine parameters, the result is wrong. On
+the 12-element reproducer in the tests it is off by 86 where the largest
+entry of the true product is 70.
+
+The cause is the same as above, seen from the other side. The forward-mode
+rule of layer norm builds the tangent of its output from the saved mean and
+scale. Those are not differentiable outputs of the forward pass, so the
+reverse pass through the tangent treats them as constants. The wrong
+product equals, to 4e-14, the gradient of a hand-written directional
+derivative with both detached
+(`test_the_wrong_reverse_over_forward_product_is_the_one_with_frozen_statistics`).
+
+Forward over reverse, `jvp(grad(f), (p,), (v,))[1]`, is correct, and so is
+reverse over reverse with plain `autograd.grad`. This library uses forward
+over reverse wherever it needs a Hessian-vector product, and tests all
+three against the dense Hessian; reverse over forward is held to it only on
+the MLP, which has no layer norm.
+
+It was found by that comparison: the three ways of computing the product
+were supposed to be a formality.
+
 ## `scaled_dot_product_attention` cannot be differentiated twice on CPU
 
 Observed on torch 2.14.1.
