@@ -1,8 +1,9 @@
 import pytest
 import torch
 
-from culprit.curvature import dense_hessian
+from culprit.curvature import dense_ggn, dense_hessian
 from culprit.curvature.products import (
+    ggn_vp,
     hvp_double_backward,
     hvp_forward_over_reverse,
     hvp_reverse_over_forward,
@@ -90,6 +91,65 @@ def test_hvp_leaves_no_gradients_behind(method):
     HVPS[method](task, params, x, y, direction)
     assert all(param.grad is None for param in task.model.parameters())
     assert not any(value.requires_grad for value in params.values())
+
+
+@pytest.mark.parametrize("problem", PROBLEMS)
+def test_ggn_vp_matches_the_dense_gauss_newton_matrix(problem):
+    task, x, y = PROBLEMS[problem]()
+    params = task.params()
+    layout = Layout.of(params)
+    flat, direction = random_direction(layout)
+    product = ggn_vp(task, params, x, y, direction)
+    assert list(product) == list(params)
+    expected = len(x) * dense_ggn(task, params, x, y) @ flat
+    assert torch.allclose(layout.flatten(product), expected, atol=1e-10)
+
+
+def test_ggn_vp_gives_a_non_negative_quadratic_form():
+    task, x, y = gpt_problem()
+    params = task.params()
+    layout = Layout.of(params)
+    for seed in range(5):
+        flat, direction = random_direction(layout, seed)
+        assert flat @ layout.flatten(ggn_vp(task, params, x, y, direction)) >= 0
+
+
+def test_ggn_vp_adds_up_over_batches():
+    task, x, y = gpt_problem(n=6)
+    params = task.params()
+    layout = Layout.of(params)
+    _, direction = random_direction(layout)
+    whole = layout.flatten(ggn_vp(task, params, x, y, direction))
+    halves = layout.flatten(ggn_vp(task, params, x[:2], y[:2], direction)) + layout.flatten(
+        ggn_vp(task, params, x[2:], y[2:], direction)
+    )
+    assert torch.allclose(whole, halves, atol=1e-10)
+
+
+def test_ggn_vp_of_a_subset_of_parameters_is_a_block_of_the_matrix():
+    task, x, y = gpt_problem(param_names=("blocks.0.attn.qkv.weight", "ln_f.weight"))
+    params = task.params()
+    layout = Layout.of(params)
+    flat, direction = random_direction(layout)
+    product = ggn_vp(task, params, x, y, direction)
+    expected = len(x) * dense_ggn(task, params, x, y) @ flat
+    assert torch.allclose(layout.flatten(product), expected, atol=1e-10)
+
+
+@pytest.mark.mps
+@pytest.mark.parametrize("problem", PROBLEMS)
+def test_ggn_vp_on_the_gpu_matches_double_precision_on_the_cpu(problem):
+    task, x, y = PROBLEMS[problem]()
+    params = task.params()
+    layout = Layout.of(params)
+    flat, direction = random_direction(layout)
+    reference = layout.flatten(ggn_vp(task, params, x, y, direction))
+
+    task.model.to("mps", torch.float32)
+    x = x.to("mps", torch.float32) if x.is_floating_point() else x.to("mps")
+    gpu_direction = layout.unflatten(flat.to("mps", torch.float32))
+    product = layout.flatten(ggn_vp(task, task.params(), x, y.to("mps"), gpu_direction))
+    assert (product.cpu().double() - reference).abs().max() < 1e-4 * reference.abs().max()
 
 
 @pytest.mark.mps

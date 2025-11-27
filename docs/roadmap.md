@@ -18,10 +18,10 @@ Items move to "Done" as they land.
   up a silent error in `torch.func.hessian`; see `docs/notes/pitfalls.md`.
 - Hessian-vector products three ways, checked against the oracle. One of
   the three is wrong through a layer norm, which is also in the pitfalls.
+- Gauss-Newton-vector products from one forward-mode and one reverse pass.
 
 ## Stage 1: exact references on tiny models
 
-- Gauss-Newton-vector products, checked against the oracle.
 - A matrix-free linear operator, with conjugate gradient and Lanczos solvers.
 - Exact influence functions on the MLP as the reference implementation.
 - A device policy: MPS has no float64, so the error of float32 curvature on

@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 
 import torch
 from torch import Tensor
-from torch.func import grad, jvp
+from torch.func import grad, jvp, vjp
 
 from culprit.task import Params, Task
 
@@ -99,4 +99,39 @@ def hvp_reverse_over_forward(
         return slope
 
     out: Params = grad(directional_derivative)(dict(params))
+    return out
+
+
+def ggn_vp(
+    task: Task,
+    params: Mapping[str, Tensor],
+    inputs: Tensor,
+    targets: Tensor,
+    vector: Mapping[str, Tensor],
+) -> Params:
+    """The Gauss-Newton matrix `J^T H J` of the summed loss, times `vector`.
+
+    Read right to left, the product is three passes and each one is a
+    different transform:
+
+    - `J v`: a forward-mode pass through the model, parameters to outputs;
+    - `H (J v)`: a Hessian-vector product of the loss alone, in the space of
+      the outputs, where it is cheap;
+    - `J^T (...)`: an ordinary backward pass through the model.
+
+    No pass differentiates another pass through the model, so unlike a
+    Hessian-vector product this needs no second derivative of any layer.
+    """
+
+    def outputs_of(at: Params) -> Tensor:
+        return task.outputs(at, inputs)
+
+    def loss_of(outputs: Tensor) -> Tensor:
+        return task.loss(outputs, targets).sum()
+
+    point = dict(params)
+    outputs, pushed = jvp(outputs_of, (point,), (dict(vector),))[:2]
+    curved = jvp(grad(loss_of), (outputs,), (pushed,))[1]
+    pullback = vjp(outputs_of, point)[1]
+    out: Params = pullback(curved)[0]
     return out
