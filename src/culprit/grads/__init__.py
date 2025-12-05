@@ -1,3 +1,3 @@
-from culprit.grads.per_example import per_example_grads
+from culprit.grads.per_example import gradient_matrix, per_example_grads
 
-__all__ = ["per_example_grads"]
+__all__ = ["gradient_matrix", "per_example_grads"]

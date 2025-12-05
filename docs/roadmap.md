@@ -22,10 +22,11 @@ Items move to "Done" as they land.
 - A matrix-free linear operator with damping, sums and block structure.
 - Conjugate gradient for several right-hand sides at once, and Lanczos with
   full reorthogonalisation.
+- Exact influence functions as the reference implementation, tested as the
+  derivative of retraining on a convex problem.
 
 ## Stage 1: exact references on tiny models
 
-- Exact influence functions on the MLP as the reference implementation.
 - A device policy: MPS has no float64, so the error of float32 curvature on
   the GPU is measured against float64 on the CPU.
 

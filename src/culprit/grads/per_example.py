@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
+import torch
 from torch import Tensor
 from torch.func import grad, vmap
 
-from culprit.task import Params
+from culprit.batching import batches
+from culprit.flat import Layout
+from culprit.task import Params, Task
 
 ExampleFn = Callable[[Mapping[str, Tensor], Tensor, Tensor], Tensor]
 
@@ -34,3 +37,26 @@ def per_example_grads(
     batched = vmap(grad(fn), in_dims=(None, 0, 0), chunk_size=chunk_size)
     out: Params = batched(dict(params), inputs, targets)
     return out
+
+
+def gradient_matrix(
+    task: Task,
+    params: Mapping[str, Tensor],
+    inputs: Tensor,
+    targets: Tensor,
+    *,
+    measure: bool = False,
+    batch_size: int | None = None,
+) -> Tensor:
+    """Per-example gradients of a whole dataset as rows, `[examples, size]`.
+
+    The rows are gradients of the loss, or of the measurement when `measure`
+    is set, flattened in the order of `Layout.of(params)`.
+    """
+    fn = task.example_measure if measure else task.example_loss
+    layout = Layout.of(params)
+    rows = [
+        layout.flatten(per_example_grads(fn, params, x, y))
+        for x, y in batches(inputs, targets, batch_size)
+    ]
+    return torch.cat(rows)
