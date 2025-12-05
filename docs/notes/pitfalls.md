@@ -100,6 +100,29 @@ On MPS the same call decomposes into plain operations and works. The GPT in
 `culprit.models` writes attention as matmul, mask and softmax so that it
 behaves the same on both.
 
+## One call from MPS to float64 on the CPU returns zeros
+
+Observed on torch 2.14.1, Darwin 25.6, Apple M5 Max.
+
+```python
+>>> torch.arange(1.0, 5.0, device="mps").to("cpu", torch.float64)
+tensor([0., 0., 0., 0.], dtype=torch.float64)
+>>> torch.arange(1.0, 5.0, device="mps").cpu().double()
+tensor([1., 2., 3., 4.], dtype=torch.float64)
+```
+
+MPS has no float64, so asking for both the move and the widening at once
+has to be split into a move and then a widening on the CPU. The single call
+does not do that and does not raise either. In one run it returned zeros and
+in another values such as `2.1e-314`, which is what uninitialised memory
+looks like.
+
+It showed up as Lanczos returning eigenvalues of zero on the GPU: the small
+tridiagonal matrix is solved on the CPU in double precision, and reached it
+empty. `culprit.device.cpu_double` does the two steps in order and is the
+only way this library moves numbers off the GPU for a double-precision
+check.
+
 ## A module output without a batch dimension hides per-example gradients
 
 This is a property of the hook approach, not a bug. Hooks recover an

@@ -132,3 +132,24 @@ def test_double_backward_through_scaled_dot_product_attention_on_cpu():
         return F.scaled_dot_product_attention(q, k, v, is_causal=True).pow(2).sum()
 
     grad(lambda q: grad(attend)(q).sum())(q)
+
+
+@pytest.mark.mps
+@pytest.mark.xfail(
+    reason="moving an MPS tensor to the CPU and to float64 in one call loses its values; "
+    "culprit.device.cpu_double does the two steps separately",
+    strict=False,
+)
+def test_one_call_from_the_gpu_to_double_precision_keeps_the_values():
+    values = torch.arange(1.0, 5.0, dtype=torch.float32, device="mps")
+    assert torch.equal(values.to("cpu", torch.float64), torch.arange(1.0, 5.0))
+
+
+@pytest.mark.mps
+def test_cpu_double_keeps_the_values():
+    from culprit.device import cpu_double
+
+    values = torch.arange(1.0, 5.0, dtype=torch.float32, device="mps")
+    moved = cpu_double(values)
+    assert moved.dtype == torch.float64 and moved.device.type == "cpu"
+    assert torch.equal(moved, torch.arange(1.0, 5.0))
