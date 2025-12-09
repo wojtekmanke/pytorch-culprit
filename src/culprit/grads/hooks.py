@@ -124,10 +124,15 @@ class Recorder:
 
         return hook
 
-    def backprops(self, value: Tensor) -> dict[str, Tensor]:
-        """The gradient of the scalar `value` at each recorded layer's output."""
+    def backprops(self, value: Tensor, *, retain_graph: bool = False) -> dict[str, Tensor]:
+        """The gradient of the scalar `value` at each recorded layer's output.
+
+        Pass `retain_graph` to take the backprops of several scalars from
+        the same forward pass.
+        """
         names = list(self.records)
-        grads = torch.autograd.grad(value, [self.records[name].output for name in names])
+        outputs = [self.records[name].output for name in names]
+        grads = torch.autograd.grad(value, outputs, retain_graph=retain_graph)
         return dict(zip(names, grads, strict=True))
 
 

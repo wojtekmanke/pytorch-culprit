@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+import torch
 from torch import Tensor
 from torch.nn import functional as F
 
@@ -45,6 +46,17 @@ class CrossEntropy:
     def __call__(self, outputs: Tensor, targets: Tensor) -> Tensor:
         picked, keep = _target_log_probs(outputs, targets)
         return _sum_per_example(-picked, keep)
+
+    def sample(self, outputs: Tensor, targets: Tensor, generator: torch.Generator) -> Tensor:
+        """Labels drawn from the model's own predictions, ignored where `targets` are.
+
+        The draw happens on the CPU so that one seed gives the same labels
+        on every device.
+        """
+        probabilities = F.softmax(outputs.detach(), dim=-1)
+        flat = probabilities.reshape(-1, probabilities.shape[-1]).cpu()
+        drawn = torch.multinomial(flat, 1, generator=generator).view(targets.shape)
+        return torch.where(targets == IGNORE, targets, drawn.to(targets.device))
 
 
 @dataclass(frozen=True)
