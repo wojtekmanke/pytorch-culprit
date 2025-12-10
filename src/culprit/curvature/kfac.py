@@ -37,6 +37,7 @@ from culprit.losses import CrossEntropy
 from culprit.task import Task
 
 FisherKind = Literal["sampled", "exact", "empirical"]
+SequenceKind = Literal["expand", "reduce"]
 
 
 class Block(ABC):
@@ -64,25 +65,54 @@ class LinearBlock(Block):
 
     The bias is the weight of a constant input of one, so the layer's
     parameters form a single `[out, in + 1]` matrix and `a` gains a trailing
-    one. A layer applied at every position of a sequence treats each
-    position as a separate input: `A` is averaged over positions and `S`
-    is summed over them and averaged over examples.
+    one.
+
+    When the layer is applied at every position of a sequence, the gradient
+    of an example is a sum over positions of outer products, and there are
+    two ways to keep a Kronecker structure (Eschenhagen et al., 2023):
+
+    - `"expand"` treats every position as an example of its own. `A` is the
+      mean of `a a^T` over all positions; `S` is `g g^T` summed over the
+      positions of an example and averaged over examples. It ignores how the
+      positions of one example are correlated.
+    - `"reduce"` first collapses each example to a single outer product:
+      the mean of its inputs with the sum of its backprops. It is exact when
+      an example's inputs are the same at every position and coarser the
+      more they vary.
+
+    Positions that are masked out of the loss still count towards `A` under
+    either choice; the block sees inputs, not targets.
     """
 
-    def __init__(self, name: str, module: nn.Linear, covered: frozenset[str]) -> None:
+    def __init__(
+        self,
+        name: str,
+        module: nn.Linear,
+        covered: frozenset[str],
+        sequence: SequenceKind = "expand",
+    ) -> None:
         self.weight, self.bias = f"{name}.weight", f"{name}.bias"
         self.with_bias = module.bias is not None and self.bias in covered
         self.names = (self.weight, self.bias) if self.with_bias else (self.weight,)
+        self.sequence = sequence
         width = module.in_features + int(self.with_bias)
         self.a_sum = torch.zeros(width, width, dtype=torch.float64)
         self.s_sum = torch.zeros(module.out_features, module.out_features, dtype=torch.float64)
         self.positions = 0
 
     def _inputs(self, a: Tensor) -> Tensor:
+        """Rows to take second moments of: `[positions, in (+1)]`."""
+        if self.sequence == "reduce":
+            a = a.reshape(a.shape[0], -1, a.shape[-1]).mean(1)
         a = a.reshape(-1, a.shape[-1])
         if self.with_bias:
             a = torch.cat([a, a.new_ones(a.shape[0], 1)], dim=1)
         return a
+
+    def _backprops(self, g: Tensor) -> Tensor:
+        if self.sequence == "reduce":
+            g = g.reshape(g.shape[0], -1, g.shape[-1]).sum(1)
+        return g.reshape(-1, g.shape[-1])
 
     def update_inputs(self, a: Tensor) -> None:
         a = self._inputs(a)
@@ -90,7 +120,7 @@ class LinearBlock(Block):
         self.positions += a.shape[0]
 
     def update_backprops(self, a: Tensor, g: Tensor) -> None:
-        g = g.reshape(-1, g.shape[-1])
+        g = self._backprops(g)
         self.s_sum += cpu_double(g.T @ g)
 
     def factors(self, draws: int) -> tuple[Tensor, Tensor]:
@@ -105,6 +135,10 @@ class EmbeddingBlock(Block):
     outer product of a one-hot vector with itself has a single one on the
     diagonal. `A` is therefore the frequency of each token and is kept as a
     vector, however large the vocabulary.
+
+    Positions are always treated as separate examples here. Averaging the
+    one-hot inputs of a sequence, as `"reduce"` would, gives a vector of
+    token counts whose second moment is no longer diagonal.
     """
 
     def __init__(self, name: str, module: nn.Embedding) -> None:
@@ -163,7 +197,7 @@ class LayerNormBlock(Block):
         return self.f_sum / draws
 
 
-def _blocks(task: Task, params: Mapping[str, Tensor]) -> dict[str, Block]:
+def _blocks(task: Task, params: Mapping[str, Tensor], sequence: SequenceKind) -> dict[str, Block]:
     """One block per layer that owns any of the task's parameters, keyed by layer name."""
     covered = frozenset(params)
     blocks: dict[str, Block] = {}
@@ -171,7 +205,7 @@ def _blocks(task: Task, params: Mapping[str, Tensor]) -> dict[str, Block]:
         if f"{name}.weight" not in covered:
             continue
         if isinstance(module, nn.Linear):
-            blocks[name] = LinearBlock(name, module, covered)
+            blocks[name] = LinearBlock(name, module, covered, sequence)
         elif isinstance(module, nn.Embedding):
             blocks[name] = EmbeddingBlock(name, module)
         elif isinstance(module, nn.LayerNorm):
@@ -228,6 +262,7 @@ def collect_factors(
     targets: Tensor,
     *,
     fisher: FisherKind = "sampled",
+    sequence: SequenceKind = "expand",
     samples: int = 1,
     seed: int = 0,
     batch_size: int | None = None,
@@ -237,9 +272,11 @@ def collect_factors(
     `fisher` chooses the labels the backprops are taken with: `"sampled"`
     draws `samples` labellings per example from the model, `"exact"`
     enumerates the classes and has no sampling noise but needs one backward
-    pass per class, and `"empirical"` uses the labels in the data.
+    pass per class, and `"empirical"` uses the labels in the data. `sequence`
+    chooses how a linear layer shared across positions is factored; see
+    `LinearBlock`.
     """
-    blocks = _blocks(task, params)
+    blocks = _blocks(task, params, sequence)
     generator = torch.Generator().manual_seed(seed)
     draws = 0
     for x, y in batches(inputs, targets, batch_size):
