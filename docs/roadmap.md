@@ -24,6 +24,8 @@ Items move to "Done" as they land.
   full reorthogonalisation.
 - Exact influence functions as the reference implementation, tested as the
   derivative of retraining on a convex problem.
+- K-FAC and EK-FAC as operators with a damped inverse, including layers
+  shared across sequence positions, and influence scores built on them.
 
 ## Stage 1: exact references on tiny models
 
@@ -32,8 +34,6 @@ Items move to "Done" as they land.
 
 ## Stage 2: approximations that scale
 
-- K-FAC and EK-FAC, including layers whose weights are shared across
-  sequence positions.
 - TracIn over checkpoints, with gradient dot products that never materialise
   the gradients.
 - TRAK, with a sparse random projection and a resumable on-disk gradient
