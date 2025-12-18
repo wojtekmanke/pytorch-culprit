@@ -26,6 +26,8 @@ Items move to "Done" as they land.
   derivative of retraining on a convex problem.
 - K-FAC and EK-FAC as operators with a damped inverse, including layers
   shared across sequence positions, and influence scores built on them.
+- TracIn over checkpoints, on gradient dot products that are taken layer by
+  layer and choose per layer whether to form the gradients at all.
 
 ## Stage 1: exact references on tiny models
 
@@ -34,8 +36,6 @@ Items move to "Done" as they land.
 
 ## Stage 2: approximations that scale
 
-- TracIn over checkpoints, with gradient dot products that never materialise
-  the gradients.
 - TRAK, with a sparse random projection and a resumable on-disk gradient
   store.
 - LiSSA, conjugate gradient and low-rank influence as iterative baselines.
