@@ -33,3 +33,31 @@ def test_benchmark_report_is_built_from_the_records_alone(tmp_path):
     # Running it again changes nothing.
     write_reports(tmp_path / "results", tmp_path / "docs")
     assert path.read_text() == text
+
+
+def test_precision_report_has_a_table_per_model(tmp_path):
+    def record(model, device, quantity, error, **extra):
+        return {
+            "model": model,
+            "parameters": 1234,
+            "device": device,
+            "quantity": quantity,
+            "relative_error": error,
+            **extra,
+        }
+
+    solve = {"iterations_double": 9, "residual": 2e-6}
+    records = [
+        record("m", "cpu", "gradients", 1.5e-7),
+        record("m", "mps", "gradients", 2.5e-7),
+        record("m", "cpu", "solve", 1e-3, iterations=7, **solve),
+        record("m", "mps", "solve", 2e-3, iterations=8, **solve),
+        record("other", "cpu", "gradients", 3e-7),
+        record("other", "mps", "gradients", 4e-7),
+    ]
+    write_jsonl(tmp_path / "results" / "benchmarks" / "precision.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert "### m, 1,234 parameters" in text and "### other, 1,234 parameters" in text
+    assert "| gradients | 1.5e-07 | 2.5e-07 |  |  |  |" in text
+    assert "| solve | 1.0e-03 | 2.0e-03 | 7 / 8 | 9 | 2e-06 / 2e-06 |" in text

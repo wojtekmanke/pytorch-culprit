@@ -19,3 +19,35 @@ Measured on Apple M5 Max with torch 2.14.1.
 | gpt 2x64 | mps | 64 | 158.07 | 7.97 | 3.60 | 20x | 44x |
 | mlp 196-32-32-10 | mps | 256 | 67.96 | 1.09 | 1.01 | 62x | 68x |
 | gpt 2x64 | mps | 256 | 434.42 | 20.86 | 4.56 | 21x | 95x |
+
+## Single precision against double
+
+Relative error of each quantity computed in float32, against the same
+quantity in float64 on the CPU: the norm of the difference over the norm
+of the reference. For the solves, the iteration counts are those of
+conjugate gradient to a relative residual of 1e-6 in float32 and 1e-10 in
+float64, and the residual is the true one of the float32 solution.
+
+### mlp 196-32-32-10, 7,690 parameters
+
+| quantity | error on cpu | error on mps | iterations (cpu / mps) | iterations in float64 | residual (cpu / mps) |
+|---|---|---|---|---|---|
+| per-example gradients | 1.9e-07 | 1.9e-07 |  |  |  |
+| Gauss-Newton-vector product | 2.6e-07 | 2.8e-07 |  |  |  |
+| Hessian-vector product | 4.0e-07 | 4.0e-07 |  |  |  |
+| CG solve, damping 0.1 | 3.2e-07 | 3.3e-07 | 11 / 11 | 17 | 3e-07 / 3e-07 |
+| CG solve, damping 0.01 | 1.0e-06 | 1.0e-06 | 28 / 28 | 41 | 7e-07 / 7e-07 |
+| CG solve, damping 0.001 | 3.5e-06 | 3.7e-06 | 79 / 78 | 118 | 9e-07 / 1e-06 |
+| CG solve, damping 0.0001 | 1.6e-05 | 1.6e-05 | 210 / 212 | 314 | 1e-06 / 1e-06 |
+
+### gpt 2x64, 114,688 parameters
+
+| quantity | error on cpu | error on mps | iterations (cpu / mps) | iterations in float64 | residual (cpu / mps) |
+|---|---|---|---|---|---|
+| per-example gradients | 3.0e-07 | 2.8e-07 |  |  |  |
+| Gauss-Newton-vector product | 3.9e-07 | 2.3e-07 |  |  |  |
+| Hessian-vector product | 9.1e-07 | 7.4e-07 |  |  |  |
+| CG solve, damping 0.1 | 1.2e-05 | 3.3e-06 | 194 / 190 | 253 | 3e-06 / 2e-06 |
+| CG solve, damping 0.01 | 4.0e-05 | 1.1e-05 | 583 / 580 | 768 | 7e-06 / 5e-06 |
+| CG solve, damping 0.001 | 1.1e-04 | 2.9e-05 | 1798 / 1803 | 2000 | 6e-05 / 4e-05 |
+| CG solve, damping 0.0001 | 1.0e-02 | 1.0e-02 | 2000 / 2000 | 2000 | 6e-03 / 5e-03 |

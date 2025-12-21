@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 
-from culprit.device import cpu_double
+from culprit.device import cpu_double, solver_tolerance
 from culprit.linalg.operator import LinearOperator
 
 
@@ -22,7 +22,7 @@ def conjugate_gradient(
     operator: LinearOperator,
     rhs: Tensor,
     *,
-    tol: float = 1e-8,
+    tol: float | None = None,
     max_iterations: int | None = None,
     preconditioner: LinearOperator | None = None,
 ) -> tuple[Tensor, SolveInfo]:
@@ -32,7 +32,8 @@ def conjugate_gradient(
     Columns are solved independently, but each iteration is a single
     `operator @ block`, which a `CurvatureOperator` turns into one pass over
     the data for all of them. A column stops being updated once its relative
-    residual is below `tol`.
+    residual is below `tol`, which defaults to what the precision of `rhs`
+    can deliver.
 
     `preconditioner` approximates the inverse of the operator. A good one
     clusters the eigenvalues and cuts the number of iterations; an exact one
@@ -40,6 +41,7 @@ def conjugate_gradient(
     """
     single = rhs.dim() == 1
     b = rhs.unsqueeze(1) if single else rhs
+    tol = solver_tolerance(b.dtype) if tol is None else tol
     # In exact arithmetic `size` iterations always suffice. Rounding makes it
     # take somewhat more, and for a large operator far fewer are affordable.
     limit = min(2 * operator.size, 1000) if max_iterations is None else max_iterations
@@ -82,6 +84,10 @@ def conjugate_gradient(
         active = active & (residual > tol)
         iterations += 1
 
+    # The residual carried by the recurrence drifts away from the true one as
+    # rounding errors accumulate, most of all in single precision. What is
+    # reported is recomputed from the solution, at the cost of one product.
+    residual = (b - operator @ x).norm(dim=0) / b_norm
     info = SolveInfo(iterations=iterations, residual=residual, converged=not bool(active.any()))
     return (x.squeeze(1) if single else x), info
 

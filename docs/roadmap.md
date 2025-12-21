@@ -26,13 +26,12 @@ Items move to "Done" as they land.
   derivative of retraining on a convex problem.
 - K-FAC and EK-FAC as operators with a damped inverse, including layers
   shared across sequence positions, and influence scores built on them.
+- A device policy from measurements of float32 on the GPU against float64
+  on the CPU: `docs/notes/precision.md`.
 - TracIn over checkpoints, on gradient dot products that are taken layer by
   layer and choose per layer whether to form the gradients at all.
 
-## Stage 1: exact references on tiny models
-
-- A device policy: MPS has no float64, so the error of float32 curvature on
-  the GPU is measured against float64 on the CPU.
+Stage 1, exact references on tiny models, is complete.
 
 ## Stage 2: approximations that scale
 

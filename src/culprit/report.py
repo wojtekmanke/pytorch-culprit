@@ -75,6 +75,48 @@ def per_example_section(records: list[Record]) -> str:
     )
 
 
+def precision_section(records: list[Record]) -> str:
+    """One table per model: a row per quantity, a column per device."""
+    devices = list(dict.fromkeys(record["device"] for record in records))
+    parts = [
+        "## Single precision against double\n\n"
+        "Relative error of each quantity computed in float32, against the same\n"
+        "quantity in float64 on the CPU: the norm of the difference over the norm\n"
+        "of the reference. For the solves, the iteration counts are those of\n"
+        "conjugate gradient to a relative residual of 1e-6 in float32 and 1e-10 in\n"
+        "float64, and the residual is the true one of the float32 solution.\n"
+    ]
+    for model in dict.fromkeys(record["model"] for record in records):
+        rows = []
+        mine = [record for record in records if record["model"] == model]
+        for quantity in dict.fromkeys(record["quantity"] for record in mine):
+            cells = {r["device"]: r for r in mine if r["quantity"] == quantity}
+            row = [quantity, *(f"{cells[device]['relative_error']:.1e}" for device in devices)]
+            first = cells[devices[0]]
+            if "iterations" in first:
+                row += [
+                    " / ".join(str(cells[device]["iterations"]) for device in devices),
+                    str(first["iterations_double"]),
+                    " / ".join(f"{cells[device]['residual']:.0e}" for device in devices),
+                ]
+            else:
+                row += ["", "", ""]
+            rows.append(row)
+        slashed = " / ".join(devices)
+        header = [
+            "quantity",
+            *(f"error on {device}" for device in devices),
+            f"iterations ({slashed})",
+            "iterations in float64",
+            f"residual ({slashed})",
+        ]
+        parts.append(
+            f"\n### {model}, {mine[0]['parameters']:,} parameters\n\n"
+            + markdown_table(header, rows)
+        )
+    return "".join(parts)
+
+
 def write_reports(results: Path, docs: Path) -> list[Path]:
     """Write every report whose records exist and return the files written."""
     written = []
@@ -82,6 +124,9 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
     per_example = read_records(results / "benchmarks" / "per_example.jsonl")
     if per_example:
         sections.append(per_example_section(per_example))
+    precision = read_records(results / "benchmarks" / "precision.jsonl")
+    if precision:
+        sections.append(precision_section(precision))
     if sections:
         path = docs / "results" / "benchmarks.md"
         path.parent.mkdir(parents=True, exist_ok=True)
