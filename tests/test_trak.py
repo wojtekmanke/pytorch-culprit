@@ -103,3 +103,72 @@ def test_scoring_before_fitting_is_an_error():
     task, x, y = mlp_problem()
     with pytest.raises(RuntimeError, match="call fit"):
         TRAK(task).score(x, y)
+
+
+class CountingProjector(Identity):
+    """Counts the rows it is asked to project, and can be told to fail."""
+
+    rows = 0
+    fail_after = None
+
+    def project(self, matrix):
+        if (
+            CountingProjector.fail_after is not None
+            and CountingProjector.rows >= CountingProjector.fail_after
+        ):
+            raise KeyboardInterrupt
+        CountingProjector.rows += len(matrix)
+        return matrix
+
+
+@pytest.fixture
+def counting():
+    CountingProjector.rows, CountingProjector.fail_after = 0, None
+    yield CountingProjector
+    CountingProjector.rows, CountingProjector.fail_after = 0, None
+
+
+def test_a_store_on_disk_gives_the_same_scores(tmp_path):
+    task, x, y = gpt_problem(n=5)
+    in_memory = TRAK(task, projection_size=64, batch_size=2).fit(x, y).score(x[:2], y[:2])
+    on_disk = (
+        TRAK(task, projection_size=64, batch_size=2, store=tmp_path / "trak")
+        .fit(x, y)
+        .score(x[:2], y[:2])
+    )
+    assert torch.allclose(on_disk, in_memory, atol=1e-12)
+    assert sorted(p.name for p in (tmp_path / "trak" / "model-0").iterdir()) == ["loss", "output"]
+
+
+def test_a_second_fit_reads_the_gradients_back(tmp_path, counting):
+    task, x, y = gpt_problem(n=5)
+    options = {"batch_size": 2, "kernel": "loss", "projector": counting, "store": tmp_path / "trak"}
+    first = TRAK(task, **options).fit(x, y)
+    assert counting.rows == 5
+    second = TRAK(task, **options).fit(x, y)
+    assert counting.rows == 5  # nothing was projected again
+    assert torch.equal(first.score(x[:2], y[:2]), second.score(x[:2], y[:2]))
+
+
+def test_an_interrupted_fit_resumes_at_the_batch_it_stopped_at(tmp_path, counting):
+    task, x, y = gpt_problem(n=5)
+    options = {"batch_size": 2, "kernel": "loss", "projector": counting, "store": tmp_path / "trak"}
+    counting.fail_after = 4  # two batches of two, then the interruption
+    with pytest.raises(KeyboardInterrupt):
+        TRAK(task, **options).fit(x, y)
+    assert counting.rows == 4
+
+    counting.fail_after = None
+    resumed = TRAK(task, **options).fit(x, y)
+    assert counting.rows == 5  # only the last example was left to do
+    reference = TRAK(task, batch_size=2, kernel="loss", projector=Identity).fit(x, y)
+    assert torch.allclose(resumed.score(x[:2], y[:2]), reference.score(x[:2], y[:2]), atol=1e-12)
+
+
+def test_a_store_from_another_model_is_refused(tmp_path):
+    task, x, y = gpt_problem(n=5)
+    TRAK(task, projection_size=64, store=tmp_path / "trak").fit(x, y)
+    with torch.no_grad():
+        task.model.head.weight += 0.1
+    with pytest.raises(ValueError, match="different fingerprint"):
+        TRAK(task, projection_size=64, store=tmp_path / "trak").fit(x, y)

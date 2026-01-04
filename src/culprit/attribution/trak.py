@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Literal, Self
 
 import torch
@@ -14,6 +15,7 @@ from culprit.device import cpu_double
 from culprit.flat import Layout
 from culprit.grads import gradient_matrix
 from culprit.projection import Projector, SparseProjector
+from culprit.store import GradientStore, digest
 from culprit.task import Params, Task
 
 ProjectorFactory = Callable[[int, int], Projector]
@@ -52,6 +54,12 @@ class TRAK(Attributor):
     so an absolute value would mean nothing; and unlike the mean eigenvalue,
     the trace does not change with the size of the projection, so neither
     does the meaning of a given `damping`.
+
+    The projected gradients of the training examples are the expensive part.
+    With `store` they are written to that directory one batch at a time, so
+    an interrupted `fit` resumes at the batch it stopped at, and a second
+    `fit` with the same models, data and seed reads them back. Scoring
+    streams them from there, so they are never all in memory.
     """
 
     def __init__(
@@ -65,6 +73,7 @@ class TRAK(Attributor):
         seed: int = 0,
         batch_size: int | None = None,
         projector: ProjectorFactory | None = None,
+        store: Path | None = None,
     ) -> None:
         super().__init__(task)
         self.checkpoints: list[Params] = (
@@ -76,47 +85,85 @@ class TRAK(Attributor):
             ]
         )
         self.damping, self.kernel, self.batch_size = damping, kernel, batch_size
+        self.seed, self.store = seed, store
         size = Layout.of(self.params).size
         make = projector or (
             lambda in_size, seed: SparseProjector(in_size, projection_size, seed=seed)
         )
         # A different projection for each model, so that their errors average out.
         self.projectors = [make(size, seed + index) for index in range(len(self.checkpoints))]
-        self._solved: list[Tensor] = []  # per model: (K / n + damping I)^-1 Psi^T, [k, n]
+        self._factors: list[Tensor] = []  # per model: Cholesky factor of K / n + ridge
+        self._psi: list[GradientStore] = []  # per model: projected loss gradients
         self._count = 0
 
-    def _features(self, model: int, inputs: Tensor, targets: Tensor, *, measure: bool) -> Tensor:
-        """Projected per-example gradients under one model, `[examples, k]` on the CPU."""
-        rows = [
-            cpu_double(
-                self.projectors[model].project(
-                    gradient_matrix(self.task, self.checkpoints[model], x, y, measure=measure)
-                )
-            )
-            for x, y in batches(inputs, targets, self.batch_size)
-        ]
-        return torch.cat(rows)
+    def _project(self, model: int, inputs: Tensor, targets: Tensor, *, measure: bool) -> Tensor:
+        """Projected per-example gradients under one model, on the CPU."""
+        grads = gradient_matrix(
+            self.task, self.checkpoints[model], inputs, targets, measure=measure
+        )
+        return self.projectors[model].project(grads).cpu()
+
+    def _train_features(
+        self, model: int, inputs: Tensor, targets: Tensor, *, measure: bool
+    ) -> GradientStore:
+        """The projected gradients of every training example, computed or read back."""
+        kind = "output" if measure else "loss"
+        params = self.checkpoints[model]
+        store = GradientStore(
+            None if self.store is None else self.store / f"model-{model}" / kind,
+            rows=len(inputs),
+            width=self.projectors[model].out_size,
+            shard_rows=self.batch_size or len(inputs),
+            fingerprint={
+                "seed": self.seed + model,
+                "kind": kind,
+                "parameters": digest(*params.values()),
+                "examples": digest(inputs, targets),
+            },
+        )
+        for index in store.missing():
+            rows = store.shard_range(index)
+            x, y = inputs[rows.start : rows.stop], targets[rows.start : rows.stop]
+            store.write(index, self._project(model, x, y, measure=measure))
+        return store
 
     def fit(self, inputs: Tensor, targets: Tensor) -> Self:
         self._count = len(inputs)
-        self._solved = []
+        self._factors, self._psi = [], []
         for model in range(len(self.checkpoints)):
-            psi = self._features(model, inputs, targets, measure=False)
+            psi = self._train_features(model, inputs, targets, measure=False)
             phi = (
                 psi
                 if self.kernel == "loss"
-                else self._features(model, inputs, targets, measure=True)
+                else self._train_features(model, inputs, targets, measure=True)
             )
-            kernel = phi.T @ phi / self._count
+            width = phi.width
+            kernel = torch.zeros(width, width, dtype=torch.float64)
+            for shard in phi:
+                rows = shard.double()
+                kernel += rows.T @ rows
+            kernel /= self._count
             ridge = self.damping * torch.trace(kernel)
-            kernel = kernel + ridge * torch.eye(kernel.shape[0], dtype=kernel.dtype)
-            self._solved.append(torch.linalg.solve(kernel, psi.T))
+            kernel += ridge * torch.eye(width, dtype=torch.float64)
+            self._factors.append(torch.linalg.cholesky(kernel))
+            self._psi.append(psi)
         return self
 
     def score(self, inputs: Tensor, targets: Tensor) -> Tensor:
-        if not self._solved:
+        if not self._factors:
             raise RuntimeError("call fit with the training examples before score")
         total = torch.zeros(len(inputs), self._count, dtype=torch.float64)
-        for model, solved in enumerate(self._solved):
-            total -= self._features(model, inputs, targets, measure=True) @ solved
-        return total / (self._count * len(self._solved))
+        for model, factor in enumerate(self._factors):
+            queries = torch.cat(
+                [
+                    cpu_double(self._project(model, x, y, measure=True))
+                    for x, y in batches(inputs, targets, self.batch_size)
+                ]
+            )
+            # Solve against the few queries once, then walk the stored rows.
+            solved = torch.cholesky_solve(queries.T, factor).T
+            start = 0
+            for shard in self._psi[model]:
+                total[:, start : start + len(shard)] -= solved @ shard.double().T
+                start += len(shard)
+        return total / (self._count * len(self._factors))

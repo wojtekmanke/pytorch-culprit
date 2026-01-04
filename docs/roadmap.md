@@ -30,13 +30,13 @@ Items move to "Done" as they land.
   on the CPU: `docs/notes/precision.md`.
 - TracIn over checkpoints, on gradient dot products that are taken layer by
   layer and choose per layer whether to form the gradients at all.
+- TRAK on a sparse random projection, with the projected gradients kept in
+  a sharded on-disk store that resumes an interrupted run.
 
 Stage 1, exact references on tiny models, is complete.
 
 ## Stage 2: approximations that scale
 
-- TRAK, with a sparse random projection and a resumable on-disk gradient
-  store.
 - LiSSA, conjugate gradient and low-rank influence as iterative baselines.
 - One `Attributor` interface and a command line over all of them.
 - A custom `autograd.Function` that composes with `grad`, `jvp` and `vmap`.
