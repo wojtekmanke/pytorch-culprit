@@ -249,3 +249,53 @@ class LiSSAInfluence(InfluenceFunction):
                 estimate = rhs + estimate - curved / self.scale
             total += estimate / self.scale
         return total / self.repeats
+
+
+class LowRankInfluence(InfluenceFunction):
+    """Influence functions with the curvature replaced by its top eigenpairs.
+
+    Lanczos finds the `rank` largest eigenvalues of the curvature and their
+    eigenvectors `U`, at the cost of a few passes over the data per
+    eigenpair. After that the inverse is two small matrix products:
+
+        (C + damping I)^-1  ~  U (L + damping)^-1 U^T  +  (I - U U^T) / damping.
+
+    The second term is what the inverse does to everything orthogonal to
+    `U` if the curvature there is zero. With it, the approximation is exact
+    once `rank` reaches the rank of the curvature. Without it
+    (`complement=False`) the query is first projected onto the top
+    eigenvectors and everything else is discarded, which is the form
+    Schioppa et al. (2022) use to keep only `rank` numbers per example.
+    """
+
+    def __init__(
+        self,
+        task: Task,
+        params: Mapping[str, Tensor] | None = None,
+        *,
+        rank: int = 32,
+        damping: float = 1e-3,
+        complement: bool = True,
+        lanczos_steps: int | None = None,
+        seed: int = 0,
+        batch_size: int | None = None,
+    ) -> None:
+        super().__init__(task, params, batch_size=batch_size)
+        self.rank, self.damping, self.complement = rank, damping, complement
+        self.lanczos_steps, self.seed = lanczos_steps, seed
+
+    def _prepare(self, inputs: Tensor, targets: Tensor) -> None:
+        operator = CurvatureOperator(
+            self.task, self.params, inputs, targets, batch_size=self.batch_size
+        )
+        self.eigenvalues, self.eigenvectors = top_eigenpairs(
+            operator, self.rank, steps=self.lanczos_steps, seed=self.seed
+        )
+
+    def _solve(self, rhs: Tensor) -> Tensor:
+        inside = self.eigenvectors.T @ rhs
+        scaled = inside / (self.eigenvalues.clamp_min(0.0) + self.damping).unsqueeze(1)
+        solution = self.eigenvectors @ scaled
+        if self.complement:
+            solution = solution + (rhs - self.eigenvectors @ inside) / self.damping
+        return solution

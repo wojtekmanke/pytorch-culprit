@@ -32,12 +32,14 @@ Items move to "Done" as they land.
   layer and choose per layer whether to form the gradients at all.
 - TRAK on a sparse random projection, with the projected gradients kept in
   a sharded on-disk store that resumes an interrupted run.
+- Conjugate gradient, LiSSA and low-rank influence as iterative baselines.
+  Preconditioning CG with EK-FAC turned out to hurt as often as help; see
+  `docs/notes/negative-results.md`.
 
 Stage 1, exact references on tiny models, is complete.
 
 ## Stage 2: approximations that scale
 
-- LiSSA, conjugate gradient and low-rank influence as iterative baselines.
 - One `Attributor` interface and a command line over all of them.
 - A custom `autograd.Function` that composes with `grad`, `jvp` and `vmap`.
 - A profiling pass and a baseline table of time and memory.

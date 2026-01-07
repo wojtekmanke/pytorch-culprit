@@ -5,6 +5,7 @@ from culprit.attribution.influence import (
     EKFACInfluence,
     InfluenceFunction,
     LiSSAInfluence,
+    LowRankInfluence,
 )
 from culprit.attribution.tracin import TracIn
 from culprit.attribution.trak import TRAK
@@ -17,5 +18,6 @@ __all__ = [
     "ExactInfluence",
     "InfluenceFunction",
     "LiSSAInfluence",
+    "LowRankInfluence",
     "TracIn",
 ]
