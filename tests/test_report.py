@@ -61,3 +61,29 @@ def test_precision_report_has_a_table_per_model(tmp_path):
     assert "### m, 1,234 parameters" in text and "### other, 1,234 parameters" in text
     assert "| gradients | 1.5e-07 | 2.5e-07 |  |  |  |" in text
     assert "| solve | 1.0e-03 | 2.0e-03 | 7 / 8 | 9 | 2e-06 / 2e-06 |" in text
+
+
+def test_preconditioning_report_has_a_column_per_preconditioner(tmp_path):
+    def record(damping, label, iterations, converged=True):
+        return {
+            "problem": "p",
+            "parameters": 40,
+            "rank": 30,
+            "damping": damping,
+            "preconditioner": label,
+            "iterations": iterations,
+            "converged": converged,
+        }
+
+    records = [
+        record(0.1, "none", 10),
+        record(0.1, "K-FAC", 20),
+        record(0.001, "none", 300),
+        record(0.001, "K-FAC", 5000, converged=False),
+    ]
+    write_jsonl(tmp_path / "results" / "benchmarks" / "preconditioning.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert "| problem | rank of the curvature | damping | none | K-FAC |" in text
+    assert "| p | 30 of 40 | 0.1 | 10 | 20 |" in text
+    assert "| p | 30 of 40 | 0.001 | 300 | 5000* |" in text

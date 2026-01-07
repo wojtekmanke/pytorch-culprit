@@ -117,6 +117,32 @@ def precision_section(records: list[Record]) -> str:
     return "".join(parts)
 
 
+def preconditioning_section(records: list[Record]) -> str:
+    """One row per problem and damping; one column of iteration counts per preconditioner."""
+    labels = list(dict.fromkeys(record["preconditioner"] for record in records))
+    cells: dict[tuple[str, float], dict[str, Record]] = defaultdict(dict)
+    for record in records:
+        cells[(record["problem"], record["damping"])][record["preconditioner"]] = record
+    rows = []
+    for (problem, damping), by_label in cells.items():
+        first = by_label[labels[0]]
+        counts = [
+            str(by_label[label]["iterations"]) + ("" if by_label[label]["converged"] else "*")
+            for label in labels
+        ]
+        rows.append([problem, f"{first['rank']} of {first['parameters']}", f"{damping:g}", *counts])
+    header = ["problem", "rank of the curvature", "damping", *labels]
+    return (
+        "## Preconditioning conjugate gradient\n\n"
+        "Iterations of conjugate gradient to a relative residual of 1e-8 against the\n"
+        "damped Gauss-Newton matrix, for three right-hand sides at once. The\n"
+        "preconditioners are the damped inverses of K-FAC, of EK-FAC, and of the true\n"
+        "matrix with the interactions between layers removed. Double precision, models\n"
+        "at their random initialisation. A star marks a solve that did not converge.\n\n"
+        + markdown_table(header, rows)
+    )
+
+
 def write_reports(results: Path, docs: Path) -> list[Path]:
     """Write every report whose records exist and return the files written."""
     written = []
@@ -127,6 +153,9 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
     precision = read_records(results / "benchmarks" / "precision.jsonl")
     if precision:
         sections.append(precision_section(precision))
+    preconditioning = read_records(results / "benchmarks" / "preconditioning.jsonl")
+    if preconditioning:
+        sections.append(preconditioning_section(preconditioning))
     if sections:
         path = docs / "results" / "benchmarks.md"
         path.parent.mkdir(parents=True, exist_ok=True)

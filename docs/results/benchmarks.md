@@ -51,3 +51,34 @@ float64, and the residual is the true one of the float32 solution.
 | CG solve, damping 0.01 | 4.0e-05 | 1.1e-05 | 583 / 580 | 768 | 7e-06 / 5e-06 |
 | CG solve, damping 0.001 | 1.1e-04 | 2.9e-05 | 1798 / 1803 | 2000 | 6e-05 / 4e-05 |
 | CG solve, damping 0.0001 | 1.0e-02 | 1.0e-02 | 2000 / 2000 | 2000 | 6e-03 / 5e-03 |
+
+## Preconditioning conjugate gradient
+
+Iterations of conjugate gradient to a relative residual of 1e-8 against the
+damped Gauss-Newton matrix, for three right-hand sides at once. The
+preconditioners are the damped inverses of K-FAC, of EK-FAC, and of the true
+matrix with the interactions between layers removed. Double precision, models
+at their random initialisation. A star marks a solve that did not converge.
+
+| problem | rank of the curvature | damping | none | K-FAC | EK-FAC | exact blocks |
+|---|---|---|---|---|---|---|
+| gpt, 12 examples | 432 of 1440 | 0.1 | 67 | 157 | 193 | 140 |
+| gpt, 12 examples | 432 of 1440 | 0.01 | 189 | 573 | 659 | 479 |
+| gpt, 12 examples | 432 of 1440 | 0.001 | 483 | 1958 | 2289 | 1581 |
+| gpt, 12 examples | 432 of 1440 | 0.0001 | 1260 | 5869 | 6573 | 4055 |
+| gpt, 60 examples | 600 of 1440 | 0.1 | 65 | 148 | 158 | 135 |
+| gpt, 60 examples | 600 of 1440 | 0.01 | 185 | 555 | 533 | 466 |
+| gpt, 60 examples | 600 of 1440 | 0.001 | 470 | 1801 | 1742 | 1449 |
+| gpt, 60 examples | 600 of 1440 | 0.0001 | 1258 | 4736 | 4549 | 3593 |
+| mlp, 200 examples | 210 of 227 | 0.1 | 18 | 23 | 22 | 21 |
+| mlp, 200 examples | 210 of 227 | 0.01 | 41 | 57 | 55 | 48 |
+| mlp, 200 examples | 210 of 227 | 0.001 | 93 | 123 | 118 | 67 |
+| mlp, 200 examples | 210 of 227 | 0.0001 | 245 | 223 | 222 | 85 |
+| mlp, 200 examples, badly scaled inputs | 210 of 227 | 0.1 | 23 | 31 | 27 | 23 |
+| mlp, 200 examples, badly scaled inputs | 210 of 227 | 0.01 | 53 | 72 | 61 | 40 |
+| mlp, 200 examples, badly scaled inputs | 210 of 227 | 0.001 | 132 | 154 | 123 | 61 |
+| mlp, 200 examples, badly scaled inputs | 210 of 227 | 0.0001 | 345 | 253 | 225 | 72 |
+| mlp, 2000 examples, badly scaled inputs | 210 of 227 | 0.1 | 23 | 30 | 28 | 22 |
+| mlp, 2000 examples, badly scaled inputs | 210 of 227 | 0.01 | 56 | 67 | 57 | 39 |
+| mlp, 2000 examples, badly scaled inputs | 210 of 227 | 0.001 | 134 | 130 | 114 | 58 |
+| mlp, 2000 examples, badly scaled inputs | 210 of 227 | 0.0001 | 357 | 183 | 167 | 67 |
