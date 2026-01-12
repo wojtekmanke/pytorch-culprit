@@ -35,12 +35,13 @@ Items move to "Done" as they land.
 - Conjugate gradient, LiSSA and low-rank influence as iterative baselines.
   Preconditioning CG with EK-FAC turned out to hurt as often as help; see
   `docs/notes/negative-results.md`.
+- One `Attributor` interface, a registry and a `culprit` command line over
+  all nine methods.
 
 Stage 1, exact references on tiny models, is complete.
 
 ## Stage 2: approximations that scale
 
-- One `Attributor` interface and a command line over all of them.
 - A custom `autograd.Function` that composes with `grad`, `jvp` and `vmap`.
 - A profiling pass and a baseline table of time and memory.
 

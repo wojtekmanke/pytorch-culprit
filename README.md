@@ -18,6 +18,28 @@ with retraining on the same machine.
 tables under `docs/results/` are built from recorded runs by
 `python -m culprit.report`; no number in this repository is written by hand.
 
+## Use
+
+```sh
+culprit methods                                   # exact cg lissa low-rank ekfac kfac graddot tracin trak
+culprit train blobs --out runs/blobs              # a small classifier, trained deterministically
+culprit score runs/blobs --method ekfac --out runs/blobs/ekfac -o damping=0.01
+```
+
+`score` writes a `[queries, training examples]` matrix. A positive entry
+says that including the training example raised the model's
+log-probability of the query's answer.
+
+From Python every method has the same two calls:
+
+```python
+from culprit.attribution import EKFACInfluence
+from culprit.task import Task
+
+task = Task(model)                        # cross-entropy loss, log-probability measurement
+scores = EKFACInfluence(task, damping=1e-2).fit(train_x, train_y).score(query_x, query_y)
+```
+
 ## Development
 
 ```sh
@@ -28,3 +50,8 @@ make check
 
 The tests run on CPU in float64 against dense references, so they need no
 GPU. Tests marked `mps` exercise the Apple GPU and skip themselves elsewhere.
+
+`docs/notes/` holds what was learned along the way: PyTorch behaviour that
+is wrong without an error (`pitfalls.md`), which precision runs where
+(`precision.md`), and results that went against expectation
+(`negative-results.md`).

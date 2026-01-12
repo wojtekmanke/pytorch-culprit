@@ -18,6 +18,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "hypothesis", "ruff", "mypy"]
 
+[project.scripts]
+culprit = "culprit.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

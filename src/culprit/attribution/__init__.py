@@ -7,6 +7,7 @@ from culprit.attribution.influence import (
     LiSSAInfluence,
     LowRankInfluence,
 )
+from culprit.attribution.registry import make_attributor, method_names
 from culprit.attribution.tracin import TracIn
 from culprit.attribution.trak import TRAK
 
@@ -20,4 +21,6 @@ __all__ = [
     "LiSSAInfluence",
     "LowRankInfluence",
     "TracIn",
+    "make_attributor",
+    "method_names",
 ]
