@@ -45,6 +45,7 @@ from culprit.flat import Layout
 from culprit.grads.hooks import Recorder
 from culprit.linalg.operator import LinearOperator
 from culprit.losses import CrossEntropy
+from culprit.models.rmsnorm import RMSNorm
 from culprit.task import Params, Task
 
 FisherKind = Literal["sampled", "exact", "empirical"]
@@ -260,20 +261,27 @@ class EmbeddingBlock(Block):
         return {self.weight: grad}
 
 
-class LayerNormBlock(Block):
-    """The full Fisher of a layer norm's weight and bias.
+class NormBlock(Block):
+    """The full Fisher of a normalisation layer's weight, and bias if it has one.
 
     The gradient of an elementwise scale is not an outer product, so there
-    is nothing to factor. There are only `2 * width` parameters, though, and
-    their Fisher is small enough to keep whole and decompose directly.
+    is nothing to factor. There are only a couple of parameters per unit,
+    though, and their Fisher is small enough to keep whole and decompose
+    directly. This covers `nn.LayerNorm` and the fused `RMSNorm`.
     """
 
-    def __init__(self, name: str, module: nn.LayerNorm, covered: frozenset[str]) -> None:
-        self.module = module
+    def __init__(self, name: str, module: nn.LayerNorm | RMSNorm, covered: frozenset[str]) -> None:
         self.weight, self.bias = f"{name}.weight", f"{name}.bias"
-        self.with_bias = module.bias is not None and self.bias in covered
+        bias = getattr(module, "bias", None)
+        self.with_bias = bias is not None and self.bias in covered
         self.names = (self.weight, self.bias) if self.with_bias else (self.weight,)
-        self.shape = tuple(module.normalized_shape)
+        if isinstance(module, RMSNorm):
+            self.shape: tuple[int, ...] = (module.width,)
+            self._normalise: Callable[[Tensor], Tensor] = module.normalise
+        else:
+            self.shape = tuple(module.normalized_shape)
+            eps = module.eps
+            self._normalise = lambda a: F.layer_norm(a, self.shape, None, None, eps)
         self.width = math.prod(self.shape)
         size = self.width * len(self.names)
         self.f_sum = torch.zeros(size, size, dtype=torch.float64)
@@ -287,7 +295,7 @@ class LayerNormBlock(Block):
         return torch.cat(parts, dim=-1)
 
     def per_example(self, a: Tensor, g: Tensor) -> Params:
-        normalised = F.layer_norm(a, self.shape, None, None, self.module.eps)
+        normalised = self._normalise(a)
         shape = (g.shape[0], -1, *self.shape)
         grads = {self.weight: (g * normalised).reshape(shape).sum(1)}
         if self.with_bias:
@@ -328,8 +336,8 @@ def _blocks(task: Task, params: Mapping[str, Tensor], sequence: SequenceKind) ->
             blocks[name] = LinearBlock(name, module, covered, sequence)
         elif isinstance(module, nn.Embedding):
             blocks[name] = EmbeddingBlock(name, module)
-        elif isinstance(module, nn.LayerNorm):
-            blocks[name] = LayerNormBlock(name, module, covered)
+        elif isinstance(module, nn.LayerNorm | RMSNorm):
+            blocks[name] = NormBlock(name, module, covered)
     owned = {name for block in blocks.values() for name in block.names}
     missing = [name for name in params if name not in owned]
     if missing:

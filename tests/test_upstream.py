@@ -153,3 +153,49 @@ def test_cpu_double_keeps_the_values():
     moved = cpu_double(values)
     assert moved.dtype == torch.float64 and moved.device.type == "cpu"
     assert torch.equal(moved, torch.arange(1.0, 5.0))
+
+
+class Cube(torch.autograd.Function):
+    """`x ** 3` with the rules written by hand, the way the documentation shows."""
+
+    generate_vmap_rule = True
+
+    @staticmethod
+    def forward(x):
+        return x**3
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        ctx.save_for_backward(*inputs)
+        ctx.save_for_forward(*inputs)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        (x,) = ctx.saved_tensors
+        return 3 * x**2 * grad_output
+
+    @staticmethod
+    def jvp(ctx, tangent):
+        (x,) = ctx.saved_tensors
+        return 3 * x**2 * tangent
+
+
+def cube_slope(x):
+    """The derivative of `sum(x ** 3)` along the all-ones direction: `sum(3 x ** 2)`."""
+    return jvp(lambda at: Cube.apply(at).sum(), (x,), (torch.ones_like(x),))[1]
+
+
+def test_reverse_over_forward_through_a_custom_function():
+    x = torch.tensor([1.5, -0.5, 2.0])
+    assert torch.allclose(grad(cube_slope)(x), 6 * x)
+
+
+@pytest.mark.xfail(
+    reason="forward over forward treats the tensors a custom jvp rule saved as constants; "
+    "the fused RMS norm supports every composition except this one",
+    strict=False,
+)
+def test_forward_over_forward_through_a_custom_function():
+    x = torch.tensor([1.5, -0.5, 2.0])
+    direction = torch.tensor([1.0, 0.0, 0.0])
+    assert jvp(cube_slope, (x,), (direction,))[1].item() == pytest.approx(9.0)

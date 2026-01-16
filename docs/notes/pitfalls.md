@@ -83,6 +83,40 @@ the MLP, which has no layer norm.
 It was found by that comparison: the three ways of computing the product
 were supposed to be a formality.
 
+## Forward over forward is wrong through any custom Function
+
+Observed on torch 2.14.1.
+
+A `torch.autograd.Function` gets forward-mode support from a `jvp` static
+method, which reads the inputs it needs through `ctx.save_for_forward`.
+Taking a second forward-mode derivative of that through `torch.func`
+returns the wrong number without an error:
+
+```python
+class Cube(torch.autograd.Function):  # x ** 3, rules written by hand
+    ...
+
+    def jvp(ctx, tangent):
+        (x,) = ctx.saved_tensors
+        return 3 * x**2 * tangent
+
+
+slope = lambda x: jvp(lambda at: Cube.apply(at).sum(), (x,), (ones,))[1]  # sum(3 x^2)
+jvp(slope, (x,), (e0,))[1]  # 0.0, where 6 * x[0] = 9.0 is right
+```
+
+The saved `x` reaches the rule without the outer level's tangent, so the
+rule's output does not depend on `x` as far as the outer level can tell.
+`torch.autograd.forward_ad` refuses to nest dual levels at all ("Nested
+forward mode AD is not supported at the moment"); `torch.func.jvp` nests
+them and returns zero.
+
+Every other composition is right for the same Function: reverse over
+reverse, forward over reverse, reverse over forward, and `vmap` around any
+of them. `tests/test_rmsnorm.py` runs the fused RMS norm through all six
+and marks only this one as expected to fail. Nothing in the library takes
+a forward-mode derivative of a forward-mode derivative.
+
 ## `scaled_dot_product_attention` cannot be differentiated twice on CPU
 
 Observed on torch 2.14.1.

@@ -37,12 +37,14 @@ Items move to "Done" as they land.
   `docs/notes/negative-results.md`.
 - One `Attributor` interface, a registry and a `culprit` command line over
   all nine methods.
+- A fused RMS norm as a custom `autograd.Function` with hand-written
+  `backward`, `jvp` and `vmap` rules, usable in the GPT in place of layer
+  norm. It is right under the compositions that `F.layer_norm` gets wrong.
 
 Stage 1, exact references on tiny models, is complete.
 
 ## Stage 2: approximations that scale
 
-- A custom `autograd.Function` that composes with `grad`, `jvp` and `vmap`.
 - A profiling pass and a baseline table of time and memory.
 
 ## Stage 3: ground truth by retraining

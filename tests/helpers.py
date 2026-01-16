@@ -1,5 +1,7 @@
 """Small problems shared by the tests, and the slow references they check against."""
 
+from dataclasses import replace
+
 import torch
 
 from culprit.data.blobs import gaussian_blobs
@@ -16,7 +18,7 @@ def mlp_problem(n=12, seed=0, **task_options):
     return Task(MLP([5, 4, 3], seed=seed), **task_options), x, y
 
 
-def gpt_problem(n=5, seed=0, **task_options):
+def gpt_problem(n=5, seed=0, norm="layernorm", **task_options):
     """A language model on random tokens, with some targets masked out."""
     generator = torch.Generator().manual_seed(seed)
     tokens = torch.randint(
@@ -24,7 +26,13 @@ def gpt_problem(n=5, seed=0, **task_options):
     )
     x, y = tokens[:, :-1], tokens[:, 1:].clone()
     y[0, 3:] = IGNORE  # one example is shorter than the others
-    return Task(GPT(GPT_CONFIG, seed=seed), **task_options), x, y
+    model = GPT(replace(GPT_CONFIG, norm=norm), seed=seed)
+    return Task(model, **task_options), x, y
+
+
+def rms_gpt_problem(n=5, seed=0, **task_options):
+    """The same model with the fused RMS norm in place of every layer norm."""
+    return gpt_problem(n, seed, norm="rmsnorm", **task_options)
 
 
 def loop_grads(task, x, y, measure=False):

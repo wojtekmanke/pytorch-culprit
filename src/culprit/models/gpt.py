@@ -9,6 +9,8 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
+from culprit.models.rmsnorm import RMSNorm
+
 
 @dataclass(frozen=True)
 class GPTConfig:
@@ -18,6 +20,15 @@ class GPTConfig:
     n_head: int = 2
     d_model: int = 64
     mlp_ratio: int = 4
+    norm: str = "layernorm"  # or "rmsnorm", the fused operation of culprit.models.rmsnorm
+
+
+def _norm(config: GPTConfig) -> nn.Module:
+    if config.norm == "layernorm":
+        return nn.LayerNorm(config.d_model)
+    if config.norm == "rmsnorm":
+        return RMSNorm(config.d_model)
+    raise ValueError(f"unknown norm {config.norm!r}")
 
 
 class CausalSelfAttention(nn.Module):
@@ -66,9 +77,9 @@ class FeedForward(nn.Module):
 class Block(nn.Module):
     def __init__(self, config: GPTConfig) -> None:
         super().__init__()
-        self.ln1 = nn.LayerNorm(config.d_model)
+        self.ln1 = _norm(config)
         self.attn = CausalSelfAttention(config)
-        self.ln2 = nn.LayerNorm(config.d_model)
+        self.ln2 = _norm(config)
         self.mlp = FeedForward(config)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -91,7 +102,7 @@ class GPT(nn.Module):
         self.wte = nn.Embedding(config.vocab_size, config.d_model)
         self.wpe = nn.Embedding(config.block_size, config.d_model)
         self.blocks = nn.ModuleList(Block(config) for _ in range(config.n_layer))
-        self.ln_f = nn.LayerNorm(config.d_model)
+        self.ln_f = _norm(config)
         self.head = nn.Linear(config.d_model, config.vocab_size, bias=False)
         self.reset_parameters(seed)
 

@@ -22,6 +22,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils.hooks import RemovableHandle
 
+from culprit.models.rmsnorm import RMSNorm
 from culprit.task import Params, Task
 
 
@@ -71,6 +72,12 @@ def _layer_norm(module: nn.Module, a: Tensor, g: Tensor) -> Params:
     return grads
 
 
+def _rms_norm(module: nn.Module, a: Tensor, g: Tensor) -> Params:
+    """The weight multiplies the normalised input, as in a layer norm without a bias."""
+    assert isinstance(module, RMSNorm)
+    return {"weight": (g * module.normalise(a)).reshape(g.shape[0], -1, module.width).sum(1)}
+
+
 LayerRule = Callable[[nn.Module, Tensor, Tensor], Params]
 
 # How to turn a layer's input and backprop into per-example gradients of its
@@ -79,6 +86,7 @@ RULES: dict[type[nn.Module], LayerRule] = {
     nn.Linear: _linear,
     nn.Embedding: _embedding,
     nn.LayerNorm: _layer_norm,
+    RMSNorm: _rms_norm,
 }
 
 

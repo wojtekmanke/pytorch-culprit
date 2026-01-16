@@ -36,7 +36,7 @@ From Python every method has the same two calls:
 from culprit.attribution import EKFACInfluence
 from culprit.task import Task
 
-task = Task(model)                        # cross-entropy loss, log-probability measurement
+task = Task(model)  # cross-entropy loss, log-probability measurement
 scores = EKFACInfluence(task, damping=1e-2).fit(train_x, train_y).score(query_x, query_y)
 ```
 

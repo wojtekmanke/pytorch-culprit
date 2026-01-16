@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch import nn
 
-from culprit.curvature.kfac import EmbeddingBlock, LayerNormBlock, LinearBlock, collect_factors
+from culprit.curvature.kfac import EmbeddingBlock, LinearBlock, NormBlock, collect_factors
 from culprit.losses import IGNORE, CrossEntropy
 from culprit.task import Task
 from helpers import gpt_problem, loop_grads, mlp_problem
@@ -118,7 +118,7 @@ def test_every_layer_type_of_the_gpt_gets_a_block():
     factors = collect_factors(task, task.params(), x, y)
     kinds = {name: type(block) for name, block in factors.blocks.items()}
     assert kinds["wte"] is EmbeddingBlock and kinds["wpe"] is EmbeddingBlock
-    assert kinds["blocks.0.ln1"] is LayerNormBlock and kinds["ln_f"] is LayerNormBlock
+    assert kinds["blocks.0.ln1"] is NormBlock and kinds["ln_f"] is NormBlock
     assert kinds["blocks.1.attn.qkv"] is LinearBlock and kinds["head"] is LinearBlock
     covered = [name for block in factors.blocks.values() for name in block.names]
     assert sorted(covered) == sorted(task.params())
