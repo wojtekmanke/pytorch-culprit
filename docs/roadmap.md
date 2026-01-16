@@ -42,6 +42,7 @@ Items move to "Done" as they land.
   norm. It is right under the compositions that `F.layer_norm` gets wrong.
 - A profile of every stage: time on both devices, peak memory and busiest
   operators on the CPU, in `docs/results/benchmarks.md`.
+- Functional AdamW and SGD that match `torch.optim` update for update.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.
@@ -49,7 +50,6 @@ scale, are complete.
 
 ## Stage 3: ground truth by retraining
 
-- A functional AdamW that matches `torch.optim.AdamW` step for step.
 - Many models trained at once with `vmap`, each on its own subset.
 - The linear datamodeling score and planted-fact recall as metrics.
 - Unrolled differentiation through a whole training run, with checkpointed
