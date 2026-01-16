@@ -143,6 +143,44 @@ def preconditioning_section(records: list[Record]) -> str:
     )
 
 
+def profile_section(records: list[Record]) -> str:
+    """One row per stage: time on each device, and what the CPU profile showed."""
+    devices = list(dict.fromkeys(record["device"] for record in records))
+    cells: dict[str, dict[str, Record]] = defaultdict(dict)
+    for record in records:
+        cells[record["stage"]][record["device"]] = record
+    step = next(iter(cells.values()))["cpu"]["seconds"]
+    rows = []
+    for stage, by_device in cells.items():
+        cpu = by_device["cpu"]
+        rows.append(
+            [
+                stage,
+                *(_milliseconds(by_device[device]["seconds"]) for device in devices),
+                f"{cpu['seconds'] / step:.1f}",
+                f"{cpu['peak_bytes'] / 2**20:.0f}",
+                cpu["operators"],
+            ]
+        )
+    header = [
+        "stage",
+        *(f"{device} (ms)" for device in devices),
+        "training steps (cpu)",
+        "peak on cpu (MiB)",
+        "busiest operators on cpu",
+    ]
+    context = records[0]
+    return (
+        "## Where time and memory go\n\n"
+        f"Each stage on a batch of {context['batch']} sequences through the two-layer GPT of\n"
+        "width 64. Times are medians; the third column is the CPU time in units of the\n"
+        "first row, an ordinary training step. Peak memory and the operators' shares of\n"
+        "the time are from one run under `torch.profiler` on the CPU.\n"
+        f"Measured on {context['machine']} with torch {context['torch']}.\n\n"
+        + markdown_table(header, rows)
+    )
+
+
 def write_reports(results: Path, docs: Path) -> list[Path]:
     """Write every report whose records exist and return the files written."""
     written = []
@@ -153,6 +191,9 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
     precision = read_records(results / "benchmarks" / "precision.jsonl")
     if precision:
         sections.append(precision_section(precision))
+    profiled = read_records(results / "benchmarks" / "profile.jsonl")
+    if profiled:
+        sections.append(profile_section(profiled))
     preconditioning = read_records(results / "benchmarks" / "preconditioning.jsonl")
     if preconditioning:
         sections.append(preconditioning_section(preconditioning))

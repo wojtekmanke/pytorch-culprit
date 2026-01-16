@@ -40,12 +40,12 @@ Items move to "Done" as they land.
 - A fused RMS norm as a custom `autograd.Function` with hand-written
   `backward`, `jvp` and `vmap` rules, usable in the GPT in place of layer
   norm. It is right under the compositions that `F.layer_norm` gets wrong.
+- A profile of every stage: time on both devices, peak memory and busiest
+  operators on the CPU, in `docs/results/benchmarks.md`.
 
-Stage 1, exact references on tiny models, is complete.
+Stages 1 and 2, exact references on tiny models and approximations that
+scale, are complete.
 
-## Stage 2: approximations that scale
-
-- A profiling pass and a baseline table of time and memory.
 
 ## Stage 3: ground truth by retraining
 

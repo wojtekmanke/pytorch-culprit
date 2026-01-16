@@ -52,6 +52,29 @@ float64, and the residual is the true one of the float32 solution.
 | CG solve, damping 0.001 | 1.1e-04 | 2.9e-05 | 1798 / 1803 | 2000 | 6e-05 / 4e-05 |
 | CG solve, damping 0.0001 | 1.0e-02 | 1.0e-02 | 2000 / 2000 | 2000 | 6e-03 / 5e-03 |
 
+## Where time and memory go
+
+Each stage on a batch of 256 sequences through the two-layer GPT of
+width 64. Times are medians; the third column is the CPU time in units of the
+first row, an ordinary training step. Peak memory and the operators' shares of
+the time are from one run under `torch.profiler` on the CPU.
+Measured on Apple M5 Max with torch 2.14.1.
+
+| stage | cpu (ms) | mps (ms) | training steps (cpu) | peak on cpu (MiB) | busiest operators on cpu |
+|---|---|---|---|---|---|
+| forward and backward | 14.90 | 4.31 | 1.0 | 34 | bmm 40%, select 11%, mm 8% |
+| per-example gradients, vmap | 23.16 | 17.51 | 1.6 | 177 | bmm 46%, select 11%, mm 7% |
+| per-example gradients, hooks | 20.66 | 9.47 | 1.4 | 171 | bmm 47%, select 11%, as_strided 6% |
+| gradient dot products with 16 queries, as sums over positions | 28.02 | 10.77 | 1.9 | 61 | bmm 40%, select 8%, addmm 5% |
+| gradient dot products with 16 queries, materialised | 30.19 | 14.09 | 2.0 | 76 | bmm 35%, mm 16%, select 9% |
+| Gauss-Newton-vector product | 49.91 | 9.92 | 3.3 | 41 | bmm 33%, select 9%, mm 8% |
+| Hessian-vector product | 67.16 | 17.27 | 4.5 | 132 | bmm 34%, mul 10%, mm 8% |
+| K-FAC factors | 21.79 | 16.20 | 1.5 | 64 | bmm 29%, mm 11%, exponential_ 10% |
+| EK-FAC, factors and eigenvalues | 106.55 | 69.14 | 7.1 | 131 | bmm 34%, _linalg_eigh 19%, mm 11% |
+| sparse projection of the gradients to 2048 | 14.66 | 22.36 | 1.0 | 116 | scatter_add_ 65%, mul 33%, div 1% |
+| forward and backward, RMS norm fused | 27.22 | 5.10 | 1.8 | 34 | bmm 29%, mul 9%, select 8% |
+| forward and backward, RMS norm from plain operations | 22.89 | 4.96 | 1.5 | 38 | bmm 29%, mul 9%, copy_ 8% |
+
 ## Preconditioning conjugate gradient
 
 Iterations of conjugate gradient to a relative residual of 1e-8 against the

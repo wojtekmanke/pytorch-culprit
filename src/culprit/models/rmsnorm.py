@@ -8,8 +8,14 @@ and each keeps a tensor the size of `x` alive for the backward pass. As a
 custom `torch.autograd.Function` it is one node that saves only its inputs,
 which exist anyway.
 
-The price is that nothing comes for free any more. Every transform this
-library applies has to be given a rule by hand:
+In the recorded run on the two-layer test GPT that lowered the peak memory
+of a training step by 12% and, on the CPU, made the step 19% slower: each
+rule is a call into Python, and the backward rule recomputes the scale. On
+the GPU the two times were within 3%. `docs/results/benchmarks.md` has both
+rows.
+
+The other price is that nothing comes for free any more. Every transform
+this library applies has to be given a rule by hand:
 
 - `backward` for reverse mode;
 - `jvp` for forward mode, which Gauss-Newton-vector products and forward

@@ -87,3 +87,32 @@ def test_preconditioning_report_has_a_column_per_preconditioner(tmp_path):
     assert "| problem | rank of the curvature | damping | none | K-FAC |" in text
     assert "| p | 30 of 40 | 0.1 | 10 | 20 |" in text
     assert "| p | 30 of 40 | 0.001 | 300 | 5000* |" in text
+
+
+def test_profile_report_relates_every_stage_to_a_training_step(tmp_path):
+    context = {"torch": "9.9", "machine": "test machine", "batch": 8}
+    records = [
+        {
+            **context,
+            "stage": "step",
+            "device": "cpu",
+            "seconds": 0.01,
+            "peak_bytes": 2**21,
+            "operators": "mm 50%",
+        },
+        {
+            **context,
+            "stage": "slow",
+            "device": "cpu",
+            "seconds": 0.025,
+            "peak_bytes": 2**23,
+            "operators": "bmm 90%",
+        },
+        {**context, "stage": "step", "device": "mps", "seconds": 0.002},
+        {**context, "stage": "slow", "device": "mps", "seconds": 0.004},
+    ]
+    write_jsonl(tmp_path / "results" / "benchmarks" / "profile.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert "| step | 10.00 | 2.00 | 1.0 | 2 | mm 50% |" in text
+    assert "| slow | 25.00 | 4.00 | 2.5 | 8 | bmm 90% |" in text

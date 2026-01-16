@@ -1,0 +1,24 @@
+{"stage": "forward and backward", "device": "cpu", "batch": 256, "seconds": 0.014902208000421524, "peak_bytes": 35289608, "operators": "bmm 40%, select 11%, mm 8%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "per-example gradients, vmap", "device": "cpu", "batch": 256, "seconds": 0.023156957991886884, "peak_bytes": 186069512, "operators": "bmm 46%, select 11%, mm 7%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "per-example gradients, hooks", "device": "cpu", "batch": 256, "seconds": 0.020661958027631044, "peak_bytes": 179228784, "operators": "bmm 47%, select 11%, as_strided 6%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "gradient dot products with 16 queries, as sums over positions", "device": "cpu", "batch": 256, "seconds": 0.0280213329824619, "peak_bytes": 64407400, "operators": "bmm 40%, select 8%, addmm 5%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "gradient dot products with 16 queries, materialised", "device": "cpu", "batch": 256, "seconds": 0.030191915982868522, "peak_bytes": 79699808, "operators": "bmm 35%, mm 16%, select 9%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "Gauss-Newton-vector product", "device": "cpu", "batch": 256, "seconds": 0.04991033300757408, "peak_bytes": 43158792, "operators": "bmm 33%, select 9%, mm 8%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "Hessian-vector product", "device": "cpu", "batch": 256, "seconds": 0.06716099998448044, "peak_bytes": 138732564, "operators": "bmm 34%, mul 10%, mm 8%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "K-FAC factors", "device": "cpu", "batch": 256, "seconds": 0.02179374999832362, "peak_bytes": 67564100, "operators": "bmm 29%, mm 11%, exponential_ 10%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "EK-FAC, factors and eigenvalues", "device": "cpu", "batch": 256, "seconds": 0.1065453749615699, "peak_bytes": 137134408, "operators": "bmm 34%, _linalg_eigh 19%, mm 11%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "sparse projection of the gradients to 2048", "device": "cpu", "batch": 256, "seconds": 0.014656624989584088, "peak_bytes": 121372672, "operators": "scatter_add_ 65%, mul 33%, div 1%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "forward and backward, RMS norm fused", "device": "cpu", "batch": 256, "seconds": 0.02722166699822992, "peak_bytes": 35146248, "operators": "bmm 29%, mul 9%, select 8%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "forward and backward, RMS norm from plain operations", "device": "cpu", "batch": 256, "seconds": 0.022889000014401972, "peak_bytes": 39805448, "operators": "bmm 29%, mul 9%, copy_ 8%", "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "forward and backward", "device": "mps", "batch": 256, "seconds": 0.004308915988076478, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "per-example gradients, vmap", "device": "mps", "batch": 256, "seconds": 0.017509999976027757, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "per-example gradients, hooks", "device": "mps", "batch": 256, "seconds": 0.009468583040870726, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "gradient dot products with 16 queries, as sums over positions", "device": "mps", "batch": 256, "seconds": 0.010765750019345433, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "gradient dot products with 16 queries, materialised", "device": "mps", "batch": 256, "seconds": 0.014086624956689775, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "Gauss-Newton-vector product", "device": "mps", "batch": 256, "seconds": 0.009923750010784715, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "Hessian-vector product", "device": "mps", "batch": 256, "seconds": 0.017271417018491775, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "K-FAC factors", "device": "mps", "batch": 256, "seconds": 0.01619683299213648, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "EK-FAC, factors and eigenvalues", "device": "mps", "batch": 256, "seconds": 0.06914124998729676, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "sparse projection of the gradients to 2048", "device": "mps", "batch": 256, "seconds": 0.022357125009875745, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "forward and backward, RMS norm fused", "device": "mps", "batch": 256, "seconds": 0.005097790970467031, "torch": "2.14.1", "machine": "Apple M5 Max"}
+{"stage": "forward and backward, RMS norm from plain operations", "device": "mps", "batch": 256, "seconds": 0.004961457976605743, "torch": "2.14.1", "machine": "Apple M5 Max"}
