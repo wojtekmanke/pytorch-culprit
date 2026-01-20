@@ -6,6 +6,7 @@ from culprit.ensemble.optim import (
     sgd_init,
     sgd_step,
 )
+from culprit.ensemble.subsets import pools, random_subsets
 from culprit.ensemble.train import (
     EnsembleRun,
     ensemble_measures,
@@ -21,6 +22,8 @@ __all__ = [
     "adamw_step",
     "ensemble_measures",
     "initial_parameters",
+    "pools",
+    "random_subsets",
     "sgd_init",
     "sgd_step",
     "train_ensemble",
