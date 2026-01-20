@@ -160,7 +160,9 @@ def train(
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
-        losses[step] = loss.detach()
+        # Moved before it is stored: writing a GPU tensor straight into a
+        # double-precision CPU tensor silently writes nothing (see pitfalls.md).
+        losses[step] = loss.detach().cpu()
         done = step + 1
         if done == total or (config.checkpoint_every and done % config.checkpoint_every == 0):
             checkpoints.append(Checkpoint(step=done, lr=lr, params=_snapshot(task)))

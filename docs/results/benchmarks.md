@@ -75,6 +75,20 @@ Measured on Apple M5 Max with torch 2.14.1.
 | forward and backward, RMS norm fused | 27.22 | 5.10 | 1.8 | 34 | bmm 29%, mul 9%, select 8% |
 | forward and backward, RMS norm from plain operations | 22.89 | 4.96 | 1.5 | 38 | bmm 29%, mul 9%, copy_ 8% |
 
+## Training many models at once
+
+Model updates per second at a batch of 64: one model with
+`torch.optim`, and several stacked along a model dimension and trained through
+`vmap`. The last column is the best of the stacked runs over the single model.
+Measured on Apple M5 Max with torch 2.14.1.
+
+| model | device | one at a time | 1 together | 8 together | 64 together | 512 together | gain |
+|---|---|---|---|---|---|---|---|
+| mlp 196-32-32-10 | cpu | 3,678 | 2,101 | 7,981 | 21,282 | 29,716 | 8.1x |
+| gpt 2x64 | cpu | 206 | 148 | 288 | 331 | 309 | 1.6x |
+| mlp 196-32-32-10 | mps | 1,044 | 881 | 5,510 | 19,346 | 24,095 | 23.1x |
+| gpt 2x64 | mps | 315 | 231 | 1,412 | 2,157 | 2,045 | 6.9x |
+
 ## Preconditioning conjugate gradient
 
 Iterations of conjugate gradient to a relative residual of 1e-8 against the

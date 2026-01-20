@@ -116,3 +116,15 @@ def test_profile_report_relates_every_stage_to_a_training_step(tmp_path):
     text = path.read_text()
     assert "| step | 10.00 | 2.00 | 1.0 | 2 | mm 50% |" in text
     assert "| slow | 25.00 | 4.00 | 2.5 | 8 | bmm 90% |" in text
+
+
+def test_ensemble_report_shows_the_gain_over_one_model(tmp_path):
+    context = {"torch": "9.9", "machine": "test machine", "batch": 4, "model": "m", "device": "cpu"}
+    records = [
+        {**context, "how": "one at a time", "models": 1, "updates_per_second": 100.0},
+        {**context, "how": "8 together", "models": 8, "updates_per_second": 400.0},
+        {**context, "how": "64 together", "models": 64, "updates_per_second": 2500.0},
+    ]
+    write_jsonl(tmp_path / "results" / "benchmarks" / "ensemble.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    assert "| m | cpu | 100 | 400 | 2,500 | 25.0x |" in path.read_text()

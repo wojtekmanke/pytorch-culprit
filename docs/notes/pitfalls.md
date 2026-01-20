@@ -134,7 +134,7 @@ On MPS the same call decomposes into plain operations and works. The GPT in
 `culprit.models` writes attention as matmul, mask and softmax so that it
 behaves the same on both.
 
-## One call from MPS to float64 on the CPU returns zeros
+## Going from MPS to float64 on the CPU in one step loses the values
 
 Observed on torch 2.14.1, Darwin 25.6, Apple M5 Max.
 
@@ -143,19 +143,29 @@ Observed on torch 2.14.1, Darwin 25.6, Apple M5 Max.
 tensor([0., 0., 0., 0.], dtype=torch.float64)
 >>> torch.arange(1.0, 5.0, device="mps").cpu().double()
 tensor([1., 2., 3., 4.], dtype=torch.float64)
+
+>>> destination = torch.full((2,), -1.0, dtype=torch.float64)
+>>> destination[:] = torch.tensor([2.5, 3.5], device="mps")
+>>> destination
+tensor([-1., -1.], dtype=torch.float64)
 ```
 
-MPS has no float64, so asking for both the move and the widening at once
-has to be split into a move and then a widening on the CPU. The single call
-does not do that and does not raise either. In one run it returned zeros and
-in another values such as `2.1e-314`, which is what uninitialised memory
-looks like.
+MPS has no float64, so a copy that both leaves the GPU and widens has to be
+done as a move followed by a widening on the CPU. A single `.to` does not
+do that and does not raise: in one run it returned zeros and in another
+values such as `2.1e-314`, which is what uninitialised memory looks like.
+Assigning into a float64 CPU tensor, by indexing or with `copy_`, leaves
+the destination exactly as it was. Into a float32 CPU tensor both work.
 
-It showed up as Lanczos returning eigenvalues of zero on the GPU: the small
-tridiagonal matrix is solved on the CPU in double precision, and reached it
-empty. `culprit.device.cpu_double` does the two steps in order and is the
-only way this library moves numbers off the GPU for a double-precision
-check.
+It showed up twice. Lanczos returned eigenvalues of zero on the GPU,
+because the small tridiagonal matrix it solves on the CPU in double
+precision arrived empty. Later a training loop on the GPU recorded a loss
+of zero at every step, because it stored each loss into a preallocated
+tensor that happened to be float64.
+
+`culprit.device.cpu_double` does the two steps in order and is the only way
+this library moves numbers off the GPU for a double-precision step.
+Anything stored from a GPU computation is moved with `.cpu()` first.
 
 ## A module output without a batch dimension hides per-example gradients
 

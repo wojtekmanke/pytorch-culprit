@@ -181,6 +181,35 @@ def profile_section(records: list[Record]) -> str:
     )
 
 
+def ensemble_section(records: list[Record]) -> str:
+    """One row per model and device; one column of updates per second per ensemble size."""
+    labels = list(dict.fromkeys(record["how"] for record in records))
+    cells: dict[tuple[str, str], dict[str, Record]] = defaultdict(dict)
+    for record in records:
+        cells[(record["model"], record["device"])][record["how"]] = record
+    rows = []
+    for (model, device), by_label in cells.items():
+        baseline = by_label[labels[0]]["updates_per_second"]
+        best = max(by_label.values(), key=lambda record: record["updates_per_second"])
+        rows.append(
+            [
+                model,
+                device,
+                *(f"{by_label[label]['updates_per_second']:,.0f}" for label in labels),
+                f"{best['updates_per_second'] / baseline:.1f}x",
+            ]
+        )
+    context = records[0]
+    return (
+        "## Training many models at once\n\n"
+        f"Model updates per second at a batch of {context['batch']}: one model with\n"
+        "`torch.optim`, and several stacked along a model dimension and trained through\n"
+        "`vmap`. The last column is the best of the stacked runs over the single model.\n"
+        f"Measured on {context['machine']} with torch {context['torch']}.\n\n"
+        + markdown_table(["model", "device", *labels, "gain"], rows)
+    )
+
+
 def write_reports(results: Path, docs: Path) -> list[Path]:
     """Write every report whose records exist and return the files written."""
     written = []
@@ -194,6 +223,9 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
     profiled = read_records(results / "benchmarks" / "profile.jsonl")
     if profiled:
         sections.append(profile_section(profiled))
+    ensemble = read_records(results / "benchmarks" / "ensemble.jsonl")
+    if ensemble:
+        sections.append(ensemble_section(ensemble))
     preconditioning = read_records(results / "benchmarks" / "preconditioning.jsonl")
     if preconditioning:
         sections.append(preconditioning_section(preconditioning))

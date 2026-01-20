@@ -116,12 +116,15 @@ class GPT(nn.Module):
                     param.zero_()
                 elif ".ln" in name or name.startswith("ln_f"):
                     param.fill_(1.0)
-                elif name.endswith("proj.weight"):
+                else:
                     # Layers that write into the residual stream start smaller,
                     # so its variance does not grow with depth.
-                    param.normal_(0.0, residual_std, generator=generator)
-                else:
-                    param.normal_(0.0, 0.02, generator=generator)
+                    std = residual_std if name.endswith("proj.weight") else 0.02
+                    # Drawn on the CPU and copied over: the same seed then
+                    # gives the same model on every device, and a CPU
+                    # generator cannot fill a tensor that lives on the GPU.
+                    drawn = torch.empty(param.shape, dtype=param.dtype)
+                    param.copy_(drawn.normal_(0.0, std, generator=generator))
 
     def forward(self, tokens: Tensor) -> Tensor:
         batch, steps = tokens.shape

@@ -1,3 +1,4 @@
+import pytest
 import torch
 from torch.func import vmap
 
@@ -102,3 +103,14 @@ def test_margin_is_the_log_odds_of_the_target():
     targets = torch.randint(7, (4,))
     p = outputs.softmax(-1).gather(1, targets[:, None]).squeeze(1)
     assert torch.allclose(Margin()(outputs, targets), torch.log(p) - torch.log1p(-p))
+
+
+@pytest.mark.mps
+@pytest.mark.parametrize("make", [lambda: MLP([6, 4, 3]), lambda: GPT(CONFIG)], ids=["mlp", "gpt"])
+def test_a_seed_gives_the_same_model_on_every_device(make):
+    on_cpu = make().float()
+    on_cpu.reset_parameters(5)
+    on_gpu = make().to("mps", torch.float32)
+    on_gpu.reset_parameters(5)
+    for a, b in zip(on_cpu.parameters(), on_gpu.parameters(), strict=True):
+        assert torch.equal(a, b.cpu())

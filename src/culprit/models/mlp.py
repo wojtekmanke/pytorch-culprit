@@ -45,7 +45,11 @@ class MLP(nn.Module):
             for module in self.layers:
                 if isinstance(module, nn.Linear):
                     bound = module.in_features**-0.5
-                    module.weight.uniform_(-bound, bound, generator=generator)
+                    # Drawn on the CPU and copied over: the same seed then
+                    # gives the same model on every device, and a CPU
+                    # generator cannot fill a tensor that lives on the GPU.
+                    drawn = torch.empty(module.weight.shape, dtype=module.weight.dtype)
+                    module.weight.copy_(drawn.uniform_(-bound, bound, generator=generator))
                     module.bias.zero_()
 
     def forward(self, x: Tensor) -> Tensor:

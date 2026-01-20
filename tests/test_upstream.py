@@ -155,6 +155,23 @@ def test_cpu_double_keeps_the_values():
     assert torch.equal(moved, torch.arange(1.0, 5.0))
 
 
+@pytest.mark.mps
+@pytest.mark.xfail(
+    reason="writing an MPS tensor into a float64 CPU tensor leaves the destination untouched; "
+    "the training loops move a loss to the CPU before storing it",
+    strict=False,
+)
+@pytest.mark.parametrize("how", ["setitem", "copy_"])
+def test_writing_a_gpu_tensor_into_a_double_precision_cpu_tensor(how):
+    destination = torch.full((2,), -1.0, dtype=torch.float64)
+    source = torch.tensor([2.5, 3.5], dtype=torch.float32, device="mps")
+    if how == "setitem":
+        destination[:] = source
+    else:
+        destination.copy_(source)
+    assert destination.tolist() == [2.5, 3.5]
+
+
 class Cube(torch.autograd.Function):
     """`x ** 3` with the rules written by hand, the way the documentation shows."""
 
