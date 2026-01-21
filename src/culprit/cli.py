@@ -21,6 +21,7 @@ from safetensors.torch import load_file, save_file
 from culprit.attribution.registry import make_attributor, method_names
 from culprit.problems import PROBLEMS, Problem
 from culprit.report import write_reports
+from culprit.retrain import RetrainPlan, retrain
 from culprit.train import TrainRun, train
 
 
@@ -101,6 +102,27 @@ def _score(args: argparse.Namespace) -> None:
         print(f"  example {index:5d}  score {value:+.3e}")
 
 
+def _retrain(args: argparse.Namespace) -> None:
+    problem = _problem(args.problem, args.seed, args.device)
+    plan = RetrainPlan(
+        models=args.models, fraction=args.fraction, seed=args.seed, together=args.together
+    )
+    started = time.perf_counter()
+    result = retrain(
+        problem.task,
+        problem.train,
+        problem.queries,
+        problem.config,
+        plan,
+        progress=lambda done, total: print(f"  {done} of {total} models", flush=True),
+    )
+    result.save(args.out)
+    (args.out / "problem.json").write_text(json.dumps({"problem": args.problem, "seed": args.seed}))
+    kept = int(result.masks[0].sum())
+    print(f"retrained {args.problem}: {plan.models} models on {kept} examples each")
+    print(f"{time.perf_counter() - started:.1f}s, saved to {args.out}")
+
+
 def _methods(args: argparse.Namespace) -> None:
     for name in method_names():
         print(name)
@@ -144,6 +166,18 @@ def parser() -> argparse.ArgumentParser:
         help="an option of the method, for example -o damping=0.01",
     )
     scoring.set_defaults(handler=_score)
+
+    retraining = commands.add_parser(
+        "retrain", help="train many models on random subsets and record the queries"
+    )
+    retraining.add_argument("problem", choices=sorted(PROBLEMS))
+    retraining.add_argument("--out", type=Path, required=True)
+    retraining.add_argument("--models", type=int, default=100)
+    retraining.add_argument("--fraction", type=float, default=0.5)
+    retraining.add_argument("--together", type=int, default=64)
+    retraining.add_argument("--seed", type=int, default=0)
+    retraining.add_argument("--device", default="cpu")
+    retraining.set_defaults(handler=_retrain)
 
     report = commands.add_parser("report", help="rebuild docs/results from results")
     report.add_argument("--results", type=Path, default=Path("results"))

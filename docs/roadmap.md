@@ -45,6 +45,8 @@ Items move to "Done" as they land.
 - Functional AdamW and SGD that match `torch.optim` update for update.
 - Many models trained at once through `vmap`, each from its own seed on its
   own examples, matching the same models trained alone.
+- A retraining harness: random subsets, one model on each, and a record of
+  what every model then measures on every query.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.
@@ -52,8 +54,6 @@ scale, are complete.
 
 ## Stage 3: ground truth by retraining
 
-- Random subsets of the training set, one per model, and the harness that
-  retrains on them and records what each model then says about the queries.
 - The linear datamodeling score and planted-fact recall as metrics.
 - Unrolled differentiation through a whole training run, with checkpointed
   replay to bound memory.

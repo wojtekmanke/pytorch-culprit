@@ -5,6 +5,7 @@ import torch
 
 from culprit.attribution import make_attributor, method_names
 from culprit.cli import load_scores, main
+from culprit.retrain import Retraining
 from culprit.train import TrainRun
 from helpers import mlp_problem
 
@@ -85,3 +86,14 @@ def test_an_unknown_name_lists_the_choices():
     task, _, _ = mlp_problem()
     with pytest.raises(KeyError, match="choose from exact, cg"):
         make_attributor("astrology", task)
+
+
+def test_retrain_saves_masks_measurements_and_a_record_per_model(tmp_path, capsys):
+    out = tmp_path / "retrain"
+    main(["retrain", "blobs", "--out", str(out), "--models", "6", "--together", "4"])
+    result = Retraining.load(out)
+    assert result.masks.shape == (6, 500) and result.measurements.shape == (6, 100)
+    assert len(result.records) == 6
+    printed = capsys.readouterr().out
+    assert "4 of 6 models" in printed and "6 of 6 models" in printed
+    assert "6 models on 250 examples each" in printed
