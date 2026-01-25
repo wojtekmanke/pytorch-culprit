@@ -47,6 +47,8 @@ Items move to "Done" as they land.
   own examples, matching the same models trained alone.
 - A retraining harness: random subsets, one model on each, and a record of
   what every model then measures on every query.
+- Two metrics: the linear datamodeling score with bootstrap intervals, and
+  recall of the known sources of a planted fact.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.
@@ -54,7 +56,6 @@ scale, are complete.
 
 ## Stage 3: ground truth by retraining
 
-- The linear datamodeling score and planted-fact recall as metrics.
 - Unrolled differentiation through a whole training run, with checkpointed
   replay to bound memory.
 - Every method compared on the MLP and then on the small GPT: accuracy

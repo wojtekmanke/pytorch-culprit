@@ -88,3 +88,36 @@ def bootstrap(
     tail = (1 - level) / 2
     low, high = torch.quantile(means, torch.tensor([tail, 1 - tail], dtype=torch.float64))
     return Interval(mean=float(values.mean()), low=float(low), high=float(high))
+
+
+def source_recall(scores: Tensor, sources: Tensor) -> Tensor:
+    """For each query, the share of its sources found at the top of its ranking.
+
+    `sources` is `[queries, examples]` and marks the training examples known
+    to be responsible for each query. A query with `k` sources is given `k`
+    guesses, the `k` highest-scored examples, and the result is the fraction
+    of them that are sources: 1 when the sources are ranked above everything
+    else, and about `k / examples` for a random ranking. A query without
+    sources has nothing to recall and gets `nan`.
+    """
+    counts = sources.sum(1)
+    order = scores.argsort(dim=1, descending=True)
+    hits = sources.gather(1, order).to(torch.float64)
+    position = torch.arange(scores.shape[1]).expand_as(hits)
+    within = (hits * (position < counts.unsqueeze(1))).sum(1)
+    return torch.where(counts > 0, within / counts, torch.full_like(within, float("nan")))
+
+
+def average_precision(scores: Tensor, sources: Tensor) -> Tensor:
+    """For each query, the mean precision at the rank of each of its sources.
+
+    Unlike `source_recall` this looks at the whole ranking: a source just
+    below the cut still counts for something, and one at the bottom counts
+    for almost nothing.
+    """
+    counts = sources.sum(1)
+    order = scores.argsort(dim=1, descending=True)
+    hits = sources.gather(1, order).to(torch.float64)
+    precision = hits.cumsum(1) / torch.arange(1, scores.shape[1] + 1, dtype=torch.float64)
+    total = (precision * hits).sum(1)
+    return torch.where(counts > 0, total / counts, torch.full_like(total, float("nan")))
