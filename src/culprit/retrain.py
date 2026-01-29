@@ -31,12 +31,18 @@ from culprit.train import TrainConfig
 class RetrainPlan:
     models: int = 100
     fraction: float = 0.5  # of the training set that each model sees
-    seed: int = 0
+    seed: int = 0  # decides the subsets
+    repeat: int = 0  # decides, with the seed, how each model is initialised and ordered
     together: int = 64  # how many models share a pass; bounds memory, not the result
 
     def model_seed(self, model: int) -> int:
-        """The seed of one model's initialisation and of the order of its examples."""
-        return (self.seed + 1) * 100_003 + model
+        """The seed of one model's initialisation and of the order of its examples.
+
+        Two plans that differ only in `repeat` train on the same subsets from
+        different seeds. Comparing them shows how much of what a model
+        measures is decided by its subset and how much by its seed.
+        """
+        return ((self.seed + 1) * 1_009 + self.repeat) * 100_003 + model
 
 
 @dataclass

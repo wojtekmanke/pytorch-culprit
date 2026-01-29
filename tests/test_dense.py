@@ -99,3 +99,12 @@ def test_matrices_cover_only_the_tasks_parameters():
     whole = dense_hessian(whole_task, whole_task.params(), x, y)
     where = Layout.of(whole_task.params()).slices()["layers.2.weight"]
     assert torch.allclose(dense_hessian(task, params, x, y), whole[where, where])
+
+
+@pytest.mark.parametrize("matrix", [dense_hessian, dense_ggn, dense_empirical_fisher])
+def test_forming_a_matrix_in_batches_gives_the_same_matrix(matrix):
+    task, x, y = gpt_problem(n=7)
+    params = task.params()
+    whole = matrix(task, params, x, y)
+    in_batches = matrix(task, params, x, y, batch_size=3)
+    assert torch.allclose(in_batches, whole, atol=1e-12)

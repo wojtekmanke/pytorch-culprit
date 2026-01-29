@@ -128,3 +128,57 @@ def test_ensemble_report_shows_the_gain_over_one_model(tmp_path):
     write_jsonl(tmp_path / "results" / "benchmarks" / "ensemble.jsonl", records)
     (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
     assert "| m | cpu | 100 | 400 | 2,500 | 25.0x |" in path.read_text()
+
+
+def test_comparison_report_lists_the_chosen_run_of_each_method_best_first(tmp_path):
+    context = {
+        "kind": "context",
+        "problem": "toy",
+        "device": "cpu",
+        "machine": "test machine",
+        "torch": "9.9",
+        "examples": 1000,
+        "queries_validation": 10,
+        "queries_test": 12,
+        "parameters": 77,
+        "models": 30,
+        "fraction": 0.5,
+        "query_accuracy": 0.9,
+        "retrain_seconds": 4.0,
+        "repeats": 6,
+        "agreement_single": "0.300 [0.200, 0.400]",
+        "agreement_halves": "0.600 [0.500, 0.700]",
+    }
+
+    def run(label, damping, test, selected):
+        return {
+            "kind": "run",
+            "problem": "toy",
+            "label": label,
+            "method": "m",
+            "options": {"damping": damping},
+            "lds_validation": test,
+            "lds_test": test,
+            "lds_low": test - 0.05,
+            "lds_high": test + 0.05,
+            "fit_seconds": 1.25,
+            "score_seconds": 0.5,
+            "selected": selected,
+        }
+
+    records = [
+        context,
+        run("weak", 0.1, 0.1, True),
+        run("strong", 0.1, 0.2, False),
+        run("strong", 0.01, 0.4, True),
+    ]
+    write_jsonl(tmp_path / "results" / "compare" / "toy.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert path.name == "comparison.md" and "## toy" in text
+    strong = "| strong | damping 0.01 | 0.400 | 0.350 to 0.450 | 1.2 | 0.5 |"
+    weak = "| weak | damping 0.1 | 0.100 | 0.050 to 0.150 | 1.2 | 0.5 |"
+    assert strong in text and weak in text and text.index(strong) < text.index(weak)
+    assert "damping 0.1 | 0.200" not in text  # the run that was not chosen
+    assert "3 runs in all" in text
+    assert "0.300 [0.200, 0.400]" in text and "0.600 [0.500, 0.700]" in text

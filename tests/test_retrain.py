@@ -86,3 +86,11 @@ def test_a_retraining_survives_a_round_trip_to_disk(tmp_path):
     assert (
         tmp_path / "retrain" / "retraining.safetensors"
     ).stat().st_size < 5 * 40 + 5 * 8 * 8 + 400
+
+
+def test_a_repeat_keeps_the_subsets_and_changes_the_models():
+    _, _, _, first = run()
+    _, _, _, again = run(plan=replace(PLAN, repeat=1))
+    assert torch.equal(first.masks, again.masks)
+    assert not torch.allclose(first.measurements, again.measurements)
+    assert {r["seed"] for r in first.records}.isdisjoint({r["seed"] for r in again.records})

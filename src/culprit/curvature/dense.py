@@ -5,7 +5,9 @@ working with one of these matrices without forming it, and is tested by
 comparing against the matrix formed here.
 
 All three are matrices of the mean loss over the examples given, indexed by
-the flat parameter vector of `Layout.of(params)`.
+the flat parameter vector of `Layout.of(params)`. Each is a sum over
+examples, so `batch_size` bounds the memory of forming it without changing
+the result.
 """
 
 from __future__ import annotations
@@ -16,13 +18,19 @@ import torch
 from torch import Tensor
 from torch.func import grad, hessian, jacfwd, jacrev, vmap
 
+from culprit.batching import batches
 from culprit.flat import Layout
-from culprit.grads import per_example_grads
+from culprit.grads import gradient_matrix
 from culprit.task import Task
 
 
 def dense_hessian(
-    task: Task, params: Mapping[str, Tensor], inputs: Tensor, targets: Tensor
+    task: Task,
+    params: Mapping[str, Tensor],
+    inputs: Tensor,
+    targets: Tensor,
+    *,
+    batch_size: int | None = None,
 ) -> Tensor:
     """The second derivative of the mean loss, `[size, size]`.
 
@@ -37,15 +45,25 @@ def dense_hessian(
     gradient as `jacrev` without the `vmap`. See `docs/notes/pitfalls.md`.
     """
     layout = Layout.of(params)
+    flat = layout.flatten(params)
+    total = torch.zeros(layout.size, layout.size, dtype=flat.dtype, device=flat.device)
+    for x, y in batches(inputs, targets, batch_size):
 
-    def mean_loss(vector: Tensor) -> Tensor:
-        return task.losses(layout.unflatten(vector), inputs, targets).mean()
+        def summed_loss(vector: Tensor, x: Tensor = x, y: Tensor = y) -> Tensor:
+            return task.losses(layout.unflatten(vector), x, y).sum()
 
-    out: Tensor = jacfwd(grad(mean_loss))(layout.flatten(params))
-    return out
+        total += jacfwd(grad(summed_loss))(flat)
+    return total / len(inputs)
 
 
-def dense_ggn(task: Task, params: Mapping[str, Tensor], inputs: Tensor, targets: Tensor) -> Tensor:
+def dense_ggn(
+    task: Task,
+    params: Mapping[str, Tensor],
+    inputs: Tensor,
+    targets: Tensor,
+    *,
+    batch_size: int | None = None,
+) -> Tensor:
     """The generalised Gauss-Newton matrix of the mean loss, `[size, size]`.
 
     With `J` the Jacobian of an example's outputs with respect to the
@@ -55,6 +73,7 @@ def dense_ggn(task: Task, params: Mapping[str, Tensor], inputs: Tensor, targets:
     semi-definite whenever the loss is convex in the outputs.
     """
     layout = Layout.of(params)
+    flat = layout.flatten(params)
 
     def example_outputs(vector: Tensor, x: Tensor) -> Tensor:
         return task.outputs(layout.unflatten(vector), x.unsqueeze(0)).squeeze(0)
@@ -62,17 +81,24 @@ def dense_ggn(task: Task, params: Mapping[str, Tensor], inputs: Tensor, targets:
     def example_output_loss(outputs: Tensor, y: Tensor) -> Tensor:
         return task.loss(outputs.unsqueeze(0), y.unsqueeze(0)).squeeze(0)
 
-    batch = len(inputs)
-    jacobian = vmap(jacrev(example_outputs), in_dims=(None, 0))(layout.flatten(params), inputs)
-    jacobian = jacobian.reshape(batch, -1, layout.size)
-    width = jacobian.shape[1]
-    output_hessian = vmap(hessian(example_output_loss))(task.outputs(params, inputs), targets)
-    output_hessian = output_hessian.reshape(batch, width, width)
-    return torch.einsum("boi,bop,bpj->ij", jacobian, output_hessian, jacobian) / batch
+    total = torch.zeros(layout.size, layout.size, dtype=flat.dtype, device=flat.device)
+    for x, y in batches(inputs, targets, batch_size):
+        jacobian = vmap(jacrev(example_outputs), in_dims=(None, 0))(flat, x)
+        jacobian = jacobian.reshape(len(x), -1, layout.size)
+        width = jacobian.shape[1]
+        output_hessian = vmap(hessian(example_output_loss))(task.outputs(params, x), y)
+        output_hessian = output_hessian.reshape(len(x), width, width)
+        total += torch.einsum("boi,bop,bpj->ij", jacobian, output_hessian, jacobian)
+    return total / len(inputs)
 
 
 def dense_empirical_fisher(
-    task: Task, params: Mapping[str, Tensor], inputs: Tensor, targets: Tensor
+    task: Task,
+    params: Mapping[str, Tensor],
+    inputs: Tensor,
+    targets: Tensor,
+    *,
+    batch_size: int | None = None,
 ) -> Tensor:
     """The mean outer product of the per-example loss gradients, `[size, size]`.
 
@@ -80,5 +106,10 @@ def dense_empirical_fisher(
     in the data where the Fisher takes an expectation over the model's own
     predictions. It is what methods that only have gradients can build.
     """
-    grads = Layout.of(params).flatten(per_example_grads(task.example_loss, params, inputs, targets))
-    return grads.T @ grads / len(inputs)
+    size = Layout.of(params).size
+    first = next(iter(params.values()))
+    total = torch.zeros(size, size, dtype=first.dtype, device=first.device)
+    for x, y in batches(inputs, targets, batch_size):
+        grads = gradient_matrix(task, params, x, y)
+        total += grads.T @ grads
+    return total / len(inputs)

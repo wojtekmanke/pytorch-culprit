@@ -210,6 +210,51 @@ def ensemble_section(records: list[Record]) -> str:
     )
 
 
+def _options_text(options: dict[str, Any]) -> str:
+    return ", ".join(f"{name} {value:g}" for name, value in options.items()) or "none"
+
+
+def comparison_section(records: list[Record]) -> str:
+    """One problem: what it was, and the chosen run of every method, best first."""
+    context = next(record for record in records if record["kind"] == "context")
+    chosen = [record for record in records if record["kind"] == "run" and record["selected"]]
+    chosen.sort(key=lambda record: record["lds_test"], reverse=True)
+    rows = [
+        [
+            record["label"],
+            _options_text(record["options"]),
+            f"{record['lds_test']:.3f}",
+            f"{record['lds_low']:.3f} to {record['lds_high']:.3f}",
+            f"{record['fit_seconds']:.1f}",
+            f"{record['score_seconds']:.1f}",
+        ]
+        for record in chosen
+    ]
+    header = ["method", "options chosen", "LDS", "95% interval", "fit (s)", "score (s)"]
+    tried = sum(1 for record in records if record["kind"] == "run")
+    return (
+        f"## {context['problem']}\n\n"
+        f"{context['examples']:,} training examples, {context['parameters']:,} parameters, "
+        f"query accuracy {context['query_accuracy']:.3f}.\n"
+        f"Ground truth: {context['models']} random subsets holding "
+        f"{context['fraction']:.0%} of the examples, with {context['repeats']} models\n"
+        f"trained on each from different seeds ({context['retrain_seconds']:.0f}s in all), "
+        "and their measurements averaged.\n"
+        "Two models trained on the same subset order the subsets alike with a rank "
+        f"correlation of\n{context['agreement_single']}: most of what one retrained model "
+        "measures is its seed, not its subset.\n"
+        f"The averages of two halves of the {context['repeats']} models agree with "
+        f"{context['agreement_halves']}, which is roughly\nwhat a perfect method could "
+        "reach against half the models, and a little less than it could reach\nagainst "
+        "all of them.\n\n"
+        f"Each method was run over a grid of its options, {tried} runs in all. The options "
+        f"were chosen on\n{context['queries_validation']} queries and the scores below are "
+        f"from the other {context['queries_test']}. The interval is a bootstrap\nover those "
+        f"queries. Times are single runs on {context['machine']} ({context['device']}), "
+        f"torch {context['torch']}.\n\n" + markdown_table(header, rows)
+    )
+
+
 def write_reports(results: Path, docs: Path) -> list[Path]:
     """Write every report whose records exist and return the files written."""
     written = []
@@ -233,6 +278,22 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
         path = docs / "results" / "benchmarks.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(_GENERATED + "# Benchmarks\n\n" + "\n".join(sections))
+        written.append(path)
+
+    comparisons = [
+        comparison_section(read_records(path))
+        for path in sorted((results / "compare").glob("*.jsonl"))
+    ]
+    if comparisons:
+        path = docs / "results" / "comparison.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        intro = (
+            "# Methods against retraining\n\n"
+            "The linear datamodeling score (LDS) of a query is the rank correlation, across\n"
+            "retrained models, between the sum of the scores of the examples a model saw and\n"
+            "what that model measured on the query. The tables give its mean over queries.\n\n"
+        )
+        path.write_text(_GENERATED + intro + "\n".join(comparisons))
         written.append(path)
     return written
 

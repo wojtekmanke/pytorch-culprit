@@ -53,7 +53,9 @@ class ExactInfluence(Attributor):
 
     def fit(self, inputs: Tensor, targets: Tensor) -> Self:
         dense = dense_ggn if self.curvature == "ggn" else dense_hessian
-        matrix = cpu_double(dense(self.task, self.params, inputs, targets))
+        matrix = cpu_double(
+            dense(self.task, self.params, inputs, targets, batch_size=self.batch_size)
+        )
         matrix = matrix + self.damping * torch.eye(self.layout.size, dtype=torch.float64)
         grads = cpu_double(
             gradient_matrix(self.task, self.params, inputs, targets, batch_size=self.batch_size)
