@@ -1,8 +1,10 @@
 from culprit.ensemble.optim import (
     AdamWState,
+    FunctionalOptimizer,
     SGDState,
     adamw_init,
     adamw_step,
+    optimizer_for,
     sgd_init,
     sgd_step,
 )
@@ -17,11 +19,13 @@ from culprit.ensemble.train import (
 __all__ = [
     "AdamWState",
     "EnsembleRun",
+    "FunctionalOptimizer",
     "SGDState",
     "adamw_init",
     "adamw_step",
     "ensemble_measures",
     "initial_parameters",
+    "optimizer_for",
     "pools",
     "random_subsets",
     "sgd_init",

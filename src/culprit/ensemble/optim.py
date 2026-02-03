@@ -15,13 +15,28 @@ update, with a model trained with the other.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+from typing import Any
 
 import torch
 from torch import Tensor
 
 from culprit.task import Params
+from culprit.train import TrainConfig
+
+
+def _root(value: Tensor) -> Tensor:
+    """The square root, with a derivative of zero instead of infinity at zero.
+
+    A parameter that has never received a gradient has a running square of
+    exactly zero. The root is zero there and its derivative is infinite,
+    which turns into `0 * inf` as soon as the update is differentiated. The
+    value returned is the ordinary root everywhere.
+    """
+    positive = value > 0
+    safe = torch.where(positive, value, torch.ones_like(value))
+    return torch.where(positive, safe.sqrt(), torch.zeros_like(value))
 
 
 @dataclass(frozen=True)
@@ -29,6 +44,13 @@ class AdamWState:
     step: int  # updates applied so far
     mean: Params  # running mean of the gradients
     square: Params  # running mean of the squared gradients
+
+    def tensors(self) -> tuple[Params, ...]:
+        """The part of the state that an update is a differentiable function of."""
+        return (self.mean, self.square)
+
+    def with_tensors(self, tensors: tuple[Params, ...]) -> AdamWState:
+        return replace(self, mean=tensors[0], square=tensors[1])
 
 
 def adamw_init(params: Mapping[str, Tensor]) -> AdamWState:
@@ -61,7 +83,7 @@ def adamw_step(
         decayed = value * (1 - lr * weight_decay)
         mean[name] = state.mean[name] + (grad - state.mean[name]) * (1 - beta1)
         square[name] = state.square[name] * beta2 + (1 - beta2) * grad * grad
-        denominator = square[name].sqrt() / correction2_root + eps
+        denominator = _root(square[name]) / correction2_root + eps
         new_params[name] = decayed - (lr / correction1) * mean[name] / denominator
     return new_params, AdamWState(step=step, mean=mean, square=square)
 
@@ -69,7 +91,13 @@ def adamw_step(
 @dataclass(frozen=True)
 class SGDState:
     step: int
-    momentum: Params  # empty when the momentum coefficient is zero
+    momentum: Params  # the last update direction; unused when the coefficient is zero
+
+    def tensors(self) -> tuple[Params, ...]:
+        return (self.momentum,)
+
+    def with_tensors(self, tensors: tuple[Params, ...]) -> SGDState:
+        return replace(self, momentum=tensors[0])
 
 
 def sgd_init(params: Mapping[str, Tensor]) -> SGDState:
@@ -95,3 +123,35 @@ def sgd_step(
         buffers[name] = grad
         new_params[name] = value - lr * grad
     return new_params, SGDState(step=state.step + 1, momentum=buffers)
+
+
+@dataclass(frozen=True)
+class FunctionalOptimizer:
+    """An optimiser with its hyperparameters bound: only the learning rate varies by step."""
+
+    init: Callable[[Mapping[str, Tensor]], Any]
+    step: Callable[[Mapping[str, Tensor], Mapping[str, Tensor], Any, float], tuple[Params, Any]]
+
+
+def optimizer_for(config: TrainConfig) -> FunctionalOptimizer:
+    """The functional counterpart of the optimiser `culprit.train.train` would build."""
+    if config.optimizer == "adamw":
+        return FunctionalOptimizer(
+            init=adamw_init,
+            step=lambda params, grads, state, lr: adamw_step(
+                params, grads, state, lr=lr, weight_decay=config.weight_decay
+            ),
+        )
+    if config.optimizer == "sgd":
+        return FunctionalOptimizer(
+            init=sgd_init,
+            step=lambda params, grads, state, lr: sgd_step(
+                params,
+                grads,
+                state,
+                lr=lr,
+                momentum=config.momentum,
+                weight_decay=config.weight_decay,
+            ),
+        )
+    raise ValueError(f"unknown optimizer {config.optimizer!r}")

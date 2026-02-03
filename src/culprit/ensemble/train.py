@@ -14,13 +14,12 @@ from __future__ import annotations
 import copy
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 from torch import Tensor
 from torch.func import grad_and_value, stack_module_state, vmap
 
-from culprit.ensemble.optim import adamw_init, adamw_step, sgd_init, sgd_step
+from culprit.ensemble.optim import optimizer_for
 from culprit.task import Params, Task
 from culprit.train import TrainConfig, batch_schedule, learning_rate
 
@@ -83,32 +82,13 @@ def train_ensemble(
     # carries a leading model dimension, including the data.
     gradients = vmap(grad_and_value(mean_loss))
 
-    state: Any
-    if config.optimizer == "adamw":
-        state = adamw_init(params)
-    elif config.optimizer == "sgd":
-        state = sgd_init(params)
-    else:
-        raise ValueError(f"unknown optimizer {config.optimizer!r}")
-
+    optimizer = optimizer_for(config)
+    state = optimizer.init(params)
     total = len(schedule)
     losses = torch.empty(total, count)
     for step, batch in enumerate(schedule):
         grads, loss = gradients(params, inputs[batch], targets[batch])
-        lr = learning_rate(step, total, config)
-        if config.optimizer == "adamw":
-            params, state = adamw_step(
-                params, grads, state, lr=lr, weight_decay=config.weight_decay
-            )
-        else:
-            params, state = sgd_step(
-                params,
-                grads,
-                state,
-                lr=lr,
-                momentum=config.momentum,
-                weight_decay=config.weight_decay,
-            )
+        params, state = optimizer.step(params, grads, state, learning_rate(step, total, config))
         # Moved before it is stored: writing a GPU tensor straight into a
         # double-precision CPU tensor silently writes nothing (see pitfalls.md).
         losses[step] = loss.detach().cpu()

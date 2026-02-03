@@ -53,6 +53,8 @@ Items move to "Done" as they land.
   grades every method against retraining with its options chosen on held-out
   queries.
 - The first comparison, on the digits: `docs/results/comparison.md`.
+- Unrolled differentiation through a whole training run, optimiser state
+  included, with states stored every few steps and replayed going backwards.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.
@@ -60,8 +62,6 @@ scale, are complete.
 
 ## Stage 3: ground truth by retraining
 
-- Unrolled differentiation through a whole training run, with checkpointed
-  replay to bound memory.
 - Every method compared on the MLP and then on the small GPT: accuracy
   against retraining, wall-clock time, peak memory.
 
