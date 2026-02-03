@@ -182,3 +182,5 @@ def test_comparison_report_lists_the_chosen_run_of_each_method_best_first(tmp_pa
     assert "damping 0.1 | 0.200" not in text  # the run that was not chosen
     assert "3 runs in all" in text
     assert "0.300 [0.200, 0.400]" in text and "0.600 [0.500, 0.700]" in text
+    # Spearman-Brown: sqrt(2 * 0.6 / 1.6) = 0.866.
+    assert "at about 0.87" in text

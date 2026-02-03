@@ -18,6 +18,26 @@ with retraining on the same machine.
 tables under `docs/results/` are built from recorded runs by
 `python -m culprit.report`; no number in this repository is written by hand.
 
+## Results so far
+
+On 5,000 MNIST digits and a 7,690-parameter classifier, graded against
+4,000 retrained models (`docs/results/comparison.md` has the full table and
+how it was made):
+
+| method | linear datamodeling score |
+|---|---|
+| TRAK over 8 independently trained models | 0.50 |
+| TRAK over the checkpoints of one run | 0.45 |
+| exact influence functions | 0.39 |
+| EK-FAC, K-FAC | 0.39 |
+| TracIn over checkpoints | 0.23 |
+| gradient dot product | 0.20 |
+
+About 0.89 is the most any method could score against that ground truth.
+The Kronecker-factored approximations lose nothing against the exact
+inverse here, and what separates the methods is how many trained models
+they average over.
+
 ## Use
 
 ```sh

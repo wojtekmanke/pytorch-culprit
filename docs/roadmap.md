@@ -49,6 +49,10 @@ Items move to "Done" as they land.
   what every model then measures on every query.
 - Two metrics: the linear datamodeling score with bootstrap intervals, and
   recall of the known sources of a planted fact.
+- A digits problem (MNIST at 14 by 14) and `experiments/compare.py`, which
+  grades every method against retraining with its options chosen on held-out
+  queries.
+- The first comparison, on the digits: `docs/results/comparison.md`.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.

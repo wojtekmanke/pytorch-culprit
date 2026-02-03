@@ -12,3 +12,7 @@ dist/
 # Anchored to the root: an unanchored `data/` also hides src/culprit/data.
 /data/
 /artifacts/
+
+# The retrained models' measurements are megabytes and are rebuilt, seed for
+# seed, by the experiment that needs them. What it concludes is in results/compare.
+/results/retrain/

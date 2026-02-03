@@ -214,6 +214,17 @@ def _options_text(options: dict[str, Any]) -> str:
     return ", ".join(f"{name} {value:g}" for name, value in options.items()) or "none"
 
 
+def _ceiling(agreement_halves: str) -> float:
+    """The best score possible against an average whose two halves agree this well.
+
+    With `r` the correlation between the averages of two halves, the
+    reliability of the average of both is `2r / (1 + r)` (Spearman-Brown),
+    and a noiseless predictor correlates with it at the square root of that.
+    """
+    r = float(agreement_halves.split()[0])
+    return float((2 * r / (1 + r)) ** 0.5)
+
+
 def comparison_section(records: list[Record]) -> str:
     """One problem: what it was, and the chosen run of every method, best first."""
     context = next(record for record in records if record["kind"] == "context")
@@ -244,9 +255,10 @@ def comparison_section(records: list[Record]) -> str:
         f"correlation of\n{context['agreement_single']}: most of what one retrained model "
         "measures is its seed, not its subset.\n"
         f"The averages of two halves of the {context['repeats']} models agree with "
-        f"{context['agreement_halves']}, which is roughly\nwhat a perfect method could "
-        "reach against half the models, and a little less than it could reach\nagainst "
-        "all of them.\n\n"
+        f"{context['agreement_halves']}. If the seed's\ncontribution is independent of "
+        "the subset, that puts the correlation of the true effect of a\nsubset with the "
+        f"average of all {context['repeats']} at about {_ceiling(context['agreement_halves']):.2f} "
+        "(Spearman-Brown), which is the most\nany method could score here.\n\n"
         f"Each method was run over a grid of its options, {tried} runs in all. The options "
         f"were chosen on\n{context['queries_validation']} queries and the scores below are "
         f"from the other {context['queries_test']}. The interval is a bootstrap\nover those "
