@@ -12,6 +12,7 @@ import argparse
 import json
 import time
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ import torch
 from safetensors.torch import load_file, save_file
 
 from culprit.attribution.registry import make_attributor, method_names
+from culprit.evaluate import accuracy
 from culprit.problems import PROBLEMS, Problem
 from culprit.report import write_reports
 from culprit.retrain import RetrainPlan, retrain
@@ -42,12 +44,10 @@ def _options(pairs: Sequence[str]) -> dict[str, Any]:
 def _problem(name: str, seed: int, device: str) -> Problem:
     problem = PROBLEMS[name](seed)
     problem.task.model.to(device)
-    return Problem(
-        name=problem.name,
-        task=problem.task,
+    return replace(
+        problem,
         train=(problem.train[0].to(device), problem.train[1].to(device)),
         queries=(problem.queries[0].to(device), problem.queries[1].to(device)),
-        config=problem.config,
     )
 
 
@@ -57,9 +57,9 @@ def _train(args: argparse.Namespace) -> None:
     run.save(args.out)
     meta = {"problem": args.problem, "seed": args.seed}
     (args.out / "problem.json").write_text(json.dumps(meta))
-    accuracy = (problem.task.model(problem.queries[0]).argmax(-1) == problem.queries[1]).float()
+    correct = accuracy(problem.task.model(problem.queries[0]), problem.queries[1])
     print(f"trained {args.problem} for {len(run.losses)} steps")
-    print(f"final loss {run.losses[-10:].mean():.4f}, query accuracy {accuracy.mean():.3f}")
+    print(f"final loss {run.losses[-10:].mean():.4f}, query accuracy {correct:.3f}")
     print(f"saved {len(run.checkpoints)} checkpoints to {args.out}")
 
 

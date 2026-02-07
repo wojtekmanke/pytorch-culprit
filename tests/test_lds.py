@@ -2,7 +2,8 @@ import pytest
 import torch
 
 from culprit.ensemble import random_subsets
-from culprit.evaluate import bootstrap, lds, predictions, ranks, spearman
+from culprit.evaluate import accuracy, bootstrap, lds, predictions, ranks, spearman
+from culprit.losses import IGNORE
 
 
 def planted(queries=12, examples=60, models=200, noise=0.0, seed=0):
@@ -103,3 +104,13 @@ def test_bootstrap_narrows_with_more_values():
     few = bootstrap(torch.randn(20, generator=generator))
     many = bootstrap(torch.randn(2000, generator=generator))
     assert (many.high - many.low) < (few.high - few.low)
+
+
+def test_accuracy_counts_only_the_positions_that_have_a_target():
+    outputs = torch.tensor(
+        [[[0.0, 2.0], [3.0, 0.0], [0.0, 1.0]], [[5.0, 0.0], [0.0, 1.0], [2.0, 0.0]]]
+    )
+    targets = torch.tensor([[1, IGNORE, 0], [IGNORE, IGNORE, 0]])
+    # Counted: (0,0) right, (0,2) wrong, (1,2) right.
+    assert accuracy(outputs, targets) == pytest.approx(2 / 3)
+    assert accuracy(torch.tensor([[0.0, 1.0], [1.0, 0.0]]), torch.tensor([1, 1])) == 0.5

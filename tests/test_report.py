@@ -184,3 +184,125 @@ def test_comparison_report_lists_the_chosen_run_of_each_method_best_first(tmp_pa
     assert "0.300 [0.200, 0.400]" in text and "0.600 [0.500, 0.700]" in text
     # Spearman-Brown: sqrt(2 * 0.6 / 1.6) = 0.866.
     assert "at about 0.87" in text
+
+
+def test_comparison_report_adds_a_recall_column_when_sources_are_known(tmp_path):
+    context = {
+        "kind": "context",
+        "problem": "facts",
+        "device": "cpu",
+        "machine": "m",
+        "torch": "9.9",
+        "examples": 100,
+        "queries_validation": 5,
+        "queries_test": 5,
+        "parameters": 7,
+        "models": 3,
+        "fraction": 0.5,
+        "query_accuracy": 1.0,
+        "retrain_seconds": 1.0,
+        "repeats": 2,
+        "agreement_single": "0.500 [0.400, 0.600]",
+        "agreement_halves": "0.500 [0.400, 0.600]",
+    }
+    run = {
+        "kind": "run",
+        "problem": "facts",
+        "label": "a",
+        "method": "m",
+        "options": {},
+        "lds_validation": 0.3,
+        "lds_test": 0.3,
+        "lds_low": 0.2,
+        "lds_high": 0.4,
+        "fit_seconds": 1.0,
+        "score_seconds": 1.0,
+        "selected": True,
+        "recall": 0.75,
+    }
+    write_jsonl(tmp_path / "results" / "compare" / "facts.jsonl", [context, run])
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert (
+        "| method | options chosen | LDS | 95% interval | sources recalled | fit (s) | score (s) |"
+        in text
+    )
+    assert "| a | none | 0.300 | 0.200 to 0.400 | 0.750 | 1.0 | 1.0 |" in text
+
+
+def test_compile_report_shows_gains_and_errors(tmp_path):
+    context = {"torch": "9.9", "machine": "test machine", "batch": 8}
+    records = [
+        {
+            **context,
+            "function": "f",
+            "device": "cpu",
+            "eager_seconds": 0.02,
+            "compiled_seconds": 0.01,
+            "first_call_seconds": 3.25,
+        },
+        {
+            **context,
+            "function": "g",
+            "device": "mps",
+            "eager_seconds": 0.03,
+            "error": "RuntimeError: no",
+        },
+    ]
+    write_jsonl(tmp_path / "results" / "benchmarks" / "compile.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert "| f | cpu | 20.00 | 10.00 | 2.00x | 3.2 |" in text
+    assert "| g | mps | 30.00 | RuntimeError: no |  |  |" in text
+
+
+def test_the_range_of_the_derivative_is_reported_per_problem(tmp_path):
+    def record(method, removed, rank, slope):
+        return {
+            "problem": "toy",
+            "optimizer": "sgd",
+            "method": method,
+            "removed": removed,
+            "share": removed / 1000,
+            "runs": 16,
+            "queries": 9,
+            "rank_correlation": rank,
+            "low": rank - 0.1,
+            "high": rank + 0.1,
+            "slope": slope,
+        }
+
+    records = [
+        record("unrolled", 5, 0.9, 0.95),
+        record("other", 5, 0.2, 3.0),
+        record("unrolled", 500, 0.1, 0.2),
+        record("other", 500, 0.4, 2.5),
+    ]
+    write_jsonl(tmp_path / "results" / "unrolled_range" / "toy.jsonl", records)
+    assert write_reports(tmp_path / "results", tmp_path / "docs") == []  # needs a comparison too
+    context = {
+        "kind": "context",
+        "problem": "toy",
+        "device": "cpu",
+        "machine": "m",
+        "torch": "9.9",
+        "examples": 1000,
+        "queries_validation": 5,
+        "queries_test": 5,
+        "parameters": 7,
+        "models": 3,
+        "fraction": 0.5,
+        "query_accuracy": 1.0,
+        "retrain_seconds": 1.0,
+        "repeats": 2,
+        "agreement_single": "0.500 [0.400, 0.600]",
+        "agreement_halves": "0.500 [0.400, 0.600]",
+    }
+    write_jsonl(tmp_path / "results" / "compare" / "toy.jsonl", [context])
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert "### toy, trained with sgd" in text
+    assert "| examples removed | share | unrolled | other | slope of unrolled |" in text
+    assert "| 5 | 0.5% | 0.90 | 0.20 | 0.95 |" in text
+    assert "| 500 | 50.0% | 0.10 | 0.40 | 0.20 |" in text
+    assert "16 random sets" in text and "9 queries" in text

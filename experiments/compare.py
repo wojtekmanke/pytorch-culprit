@@ -21,9 +21,16 @@ import torch
 from benchmarks.common import machine
 from torch import Tensor
 
-from culprit.attribution import make_attributor
+from culprit.attribution import Unrolled, make_attributor
 from culprit.ensemble import train_ensemble
-from culprit.evaluate import bootstrap, lds, spearman
+from culprit.evaluate import (
+    accuracy,
+    average_precision,
+    bootstrap,
+    lds,
+    source_recall,
+    spearman,
+)
 from culprit.problems import PROBLEMS, Problem
 from culprit.retrain import Retraining, RetrainPlan, retrain
 from culprit.train import Checkpoint, TrainRun, train
@@ -34,12 +41,15 @@ DAMPINGS = (1e-4, 1e-3, 1e-2, 1e-1)
 Spec = tuple[str, str, str, list[dict[str, Any]]]  # label, method, checkpoints, option grid
 
 
-def specs(batch: int) -> list[Spec]:
+def specs(batch: int, parameters: int) -> list[Spec]:
     """What is run: a label, the method, which parameters it gets, and its grid."""
     big, small = {"batch_size": batch}, {"batch_size": batch // 4}
     damped = [{"damping": damping} for damping in DAMPINGS]
-    return [
-        ("exact influence", "exact", "final", [{**d, **small} for d in damped]),
+    listed: list[Spec] = []
+    if parameters <= 20_000:
+        # The curvature matrix has to fit in memory to be inverted exactly.
+        listed.append(("exact influence", "exact", "final", [{**d, **small} for d in damped]))
+    listed += [
         ("EK-FAC", "ekfac", "final", [{**d, **big} for d in damped]),
         ("K-FAC", "kfac", "final", [{**d, **big} for d in damped]),
         *(
@@ -47,7 +57,7 @@ def specs(batch: int) -> list[Spec]:
                 f"conjugate gradient, {iterations} iterations",
                 "cg",
                 "final",
-                [{**d, **big, "max_iterations": iterations, "chunk_size": 50} for d in damped],
+                [{**d, **big, "max_iterations": iterations, "chunk_size": 40} for d in damped],
             )
             for iterations in (10, 100)
         ),
@@ -82,6 +92,7 @@ def specs(batch: int) -> list[Spec]:
             )
         ),
     ]
+    return listed
 
 
 def on_device(problem: Problem, device: str) -> Problem:
@@ -113,6 +124,65 @@ def independent_models(problem: Problem, count: int) -> list[Checkpoint]:
     ]
 
 
+class Timed(Retraining):
+    seconds: float
+
+
+def retrained(problem: Problem, plan: RetrainPlan, root: Path) -> Timed:
+    """Retrain according to `plan`, or read back an earlier run of the same plan.
+
+    Retraining is deterministic, so a stored result of the same plan and
+    training configuration is the result. The time it took is stored with it.
+    """
+    directory = root / f"repeat-{plan.repeat}"
+    timing = directory / "seconds.json"
+    if timing.exists():
+        stored = Retraining.load(directory)
+        if stored.plan == plan and stored.config == problem.config:
+            result = Timed(**vars(stored))
+            result.seconds = json.loads(timing.read_text())
+            return result
+    started = time.perf_counter()
+    fresh = retrain(problem.task, problem.train, problem.queries, problem.config, plan)
+    result = Timed(**vars(fresh))
+    result.seconds = time.perf_counter() - started
+    fresh.save(directory)
+    timing.write_text(json.dumps(result.seconds))
+    return result
+
+
+def unrolled_scores(
+    problem: Problem, seeds: list[int], segment: int
+) -> tuple[Tensor, float, float]:
+    """Unrolled scores averaged over training runs that differ in their seed.
+
+    The first seed should be the one of the model being explained. Each run
+    is repeated from its initialisation and differentiated through; returns
+    the mean scores and the seconds spent training and differentiating.
+    """
+    task = problem.task
+    total: Tensor | None = None
+    fit_seconds = score_seconds = 0.0
+    kept = {name: value.clone() for name, value in task.params().items()}
+    for seed in seeds:
+        task.model.reset_parameters(seed)  # type: ignore[operator]
+        initial = {name: value.clone() for name, value in task.params().items()}
+        attributor = Unrolled(task, replace(problem.config, seed=seed), initial, segment=segment)
+        started = time.perf_counter()
+        attributor.fit(*problem.train)
+        fitted = time.perf_counter()
+        scores = attributor.score(*problem.queries)
+        fit_seconds += fitted - started
+        score_seconds += time.perf_counter() - fitted
+        total = scores if total is None else total + scores
+    with torch.no_grad():
+        for name, value in dict(task.model.named_parameters()).items():
+            if name in kept:
+                value.copy_(kept[name])
+    assert total is not None
+    return total / len(seeds), fit_seconds, score_seconds
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("problem", choices=sorted(PROBLEMS))
@@ -124,6 +194,8 @@ def main() -> None:
     parser.add_argument("--independent", type=int, default=8)
     parser.add_argument("--batch", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--unrolled-runs", type=int, default=4)
+    parser.add_argument("--segment", type=int, default=50)
     args = parser.parse_args()
 
     problem = on_device(PROBLEMS[args.problem](args.seed), args.device)
@@ -131,10 +203,8 @@ def main() -> None:
 
     # The model whose outputs are being attributed.
     run: TrainRun = train(task, *problem.train, problem.config)
-    accuracy = float(
-        (task.model(problem.queries[0]).argmax(-1) == problem.queries[1]).float().mean()
-    )
-    print(f"trained: loss {run.losses[-20:].mean():.4f}, query accuracy {accuracy:.3f}", flush=True)
+    correct = accuracy(task.model(problem.queries[0]), problem.queries[1])
+    print(f"trained: loss {run.losses[-20:].mean():.4f}, query accuracy {correct:.3f}", flush=True)
     final = [Checkpoint(step=run.checkpoints[-1].step, lr=1.0, params=run.final)]
     parameter_sets = {"final": final, "checkpoints": run.checkpoints}
 
@@ -145,11 +215,9 @@ def main() -> None:
     started = time.perf_counter()
     for repeat in range(args.repeats):
         plan = RetrainPlan(args.models, args.fraction, args.seed, repeat, args.together)
-        result = retrain(task, problem.train, problem.queries, problem.config, plan)
-        result.save(RESULTS / "retrain" / args.problem / f"repeat-{repeat}")
-        retrainings.append(result)
+        retrainings.append(retrained(problem, plan, RESULTS / "retrain" / args.problem))
         print(f"  repeat {repeat + 1} of {args.repeats} retrained", flush=True)
-    retrain_seconds = time.perf_counter() - started
+    retrain_seconds = sum(result.seconds for result in retrainings)
     masks = retrainings[0].masks
     measured = torch.stack([result.measurements for result in retrainings])
     target = measured.mean(0)
@@ -182,7 +250,9 @@ def main() -> None:
             "parameters": sum(value.numel() for value in task.params().values()),
             "models": args.models,
             "fraction": args.fraction,
-            "query_accuracy": accuracy,
+            "query_accuracy": correct,
+            "optimizer": problem.config.optimizer,
+            "steps": len(run.losses),
             "final_loss": float(run.losses[-20:].mean()),
             "retrain_seconds": retrain_seconds,
             "independent_models": args.independent,
@@ -193,7 +263,41 @@ def main() -> None:
         }
     ]
 
-    for label, method, which, grid in specs(args.batch):
+    def graded(
+        label: str, method: str, options: dict[str, Any], scores: Tensor, fit: float, score: float
+    ) -> dict[str, Any]:
+        per_query = lds(scores, masks, target)
+        interval = bootstrap(per_query[test])
+        shown = {k: v for k, v in options.items() if k not in ("batch_size", "chunk_size")}
+        record = {
+            "kind": "run",
+            "problem": args.problem,
+            "label": label,
+            "method": method,
+            "options": shown,
+            "lds_validation": float(per_query[validation].mean()),
+            "lds_test": interval.mean,
+            "lds_low": interval.low,
+            "lds_high": interval.high,
+            "fit_seconds": fit,
+            "score_seconds": score,
+            "selected": False,
+        }
+        if problem.sources is not None:
+            # Where the responsible examples are known, also ask for them directly.
+            sources = problem.sources[test]
+            record["recall"] = float(source_recall(scores[test], sources).nanmean())
+            record["average_precision"] = float(average_precision(scores[test], sources).nanmean())
+        print(
+            f"{label:36s} {json.dumps(shown):48s} "
+            f"validation {record['lds_validation']:+.3f}  test {interval}  "
+            f"fit {fit:6.1f}s  score {score:6.1f}s",
+            flush=True,
+        )
+        return record
+
+    parameters = sum(value.numel() for value in task.params().values())
+    for label, method, which, grid in specs(args.batch, parameters):
         runs = []
         for options in grid:
             attributor = make_attributor(method, task, parameter_sets[which], **options)
@@ -202,33 +306,19 @@ def main() -> None:
             fitted = time.perf_counter()
             scores: Tensor = attributor.score(*problem.queries)
             finished = time.perf_counter()
-            per_query = lds(scores, masks, target)
-            interval = bootstrap(per_query[test])
-            shown = {k: v for k, v in options.items() if k not in ("batch_size", "chunk_size")}
-            runs.append(
-                {
-                    "kind": "run",
-                    "problem": args.problem,
-                    "label": label,
-                    "method": method,
-                    "options": shown,
-                    "lds_validation": float(per_query[validation].mean()),
-                    "lds_test": interval.mean,
-                    "lds_low": interval.low,
-                    "lds_high": interval.high,
-                    "fit_seconds": fitted - started,
-                    "score_seconds": finished - fitted,
-                    "selected": False,
-                }
-            )
-            print(
-                f"{label:36s} {json.dumps(shown):48s} "
-                f"validation {runs[-1]['lds_validation']:+.3f}  test {interval}  "
-                f"fit {runs[-1]['fit_seconds']:6.1f}s  score {runs[-1]['score_seconds']:6.1f}s",
-                flush=True,
-            )
+            runs.append(graded(label, method, options, scores, fitted - started, finished - fitted))
         max(runs, key=lambda record: record["lds_validation"])["selected"] = True
         records.extend(runs)
+
+    # Unrolling explains a training run, not a set of parameters, so it is
+    # given the runs: the one being explained, then others from other seeds.
+    seeds = [args.seed, *(20_000 + index for index in range(args.unrolled_runs - 1))]
+    for count in sorted({1, args.unrolled_runs}):
+        scores, fit, score = unrolled_scores(problem, seeds[:count], args.segment)
+        label = "unrolled, the run itself" if count == 1 else f"unrolled, {count} runs averaged"
+        record = graded(label, "unrolled", {}, scores, fit, score)
+        record["selected"] = True
+        records.append(record)
 
     path = RESULTS / "compare" / f"{args.problem}.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)

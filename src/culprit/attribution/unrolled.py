@@ -34,7 +34,7 @@ from typing import Any, Self
 
 import torch
 from torch import Tensor
-from torch.func import grad_and_value, vjp, vmap
+from torch.func import grad, grad_and_value, vjp, vmap
 
 from culprit.attribution.base import Attributor
 from culprit.device import cpu_double
@@ -115,6 +115,44 @@ def functional_train(
         )
         losses[step] = loss.detach().cpu()
     return FunctionalRun(final=params, losses=losses, schedule=schedule, snapshots=snapshots)
+
+
+def weighted_runs(
+    task: Task,
+    inputs: Tensor,
+    targets: Tensor,
+    config: TrainConfig,
+    initial: Mapping[str, Tensor],
+    weights: Tensor,
+) -> Params:
+    """The final parameters of many runs that differ only in their example weights.
+
+    `weights` is `[runs, examples]`. Every run starts from `initial` and
+    visits the examples in the same order, so the runs differ in nothing but
+    the weights: a weight of zero removes an example without changing which
+    batch it would have been in. That is retraining matched to one run, the
+    counterfactual a derivative taken through that run is a statement about.
+    The runs are trained together; the result has a leading run dimension.
+    """
+    optimizer = optimizer_for(config)
+    schedule = batch_schedule(len(inputs), config.batch_size, config.epochs, config.seed)
+    schedule = schedule.to(inputs.device)
+    weights = weights.to(inputs.device)
+    params: Params = {
+        name: value.expand(len(weights), *value.shape).clone() for name, value in initial.items()
+    }
+    state = optimizer.init(params)
+
+    def loss(at: Params, batch_weights: Tensor, x: Tensor, y: Tensor) -> Tensor:
+        return (batch_weights * task.losses(at, x, y)).mean()
+
+    gradients = vmap(grad(loss), in_dims=(0, 0, None, None))
+    for step, batch in enumerate(schedule):
+        grads = gradients(params, weights[:, batch], inputs[batch], targets[batch])
+        params, state = optimizer.step(
+            params, grads, state, learning_rate(step, len(schedule), config)
+        )
+    return params
 
 
 class Unrolled(Attributor):

@@ -55,6 +55,8 @@ Items move to "Done" as they land.
 - The first comparison, on the digits: `docs/results/comparison.md`.
 - Unrolled differentiation through a whole training run, optimiser state
   included, with states stored every few steps and replayed going backwards.
+- Unrolling graded against retraining, with an SGD-trained control and an
+  experiment on how far from its own run the derivative holds.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.

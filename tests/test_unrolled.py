@@ -3,7 +3,7 @@ from dataclasses import replace
 import pytest
 import torch
 
-from culprit.attribution.unrolled import Unrolled, functional_train
+from culprit.attribution.unrolled import Unrolled, functional_train, weighted_runs
 from culprit.grads import gradient_matrix
 from culprit.train import TrainConfig, train
 from helpers import gpt_problem, mlp_problem, rms_gpt_problem
@@ -153,3 +153,33 @@ def test_unrolling_on_the_gpu_follows_the_cpu():
         .score(queries[0].to("mps"), queries[1].to("mps"))
     )
     assert (scores - reference).abs().max() < 1e-2 * reference.abs().max()
+
+
+@pytest.mark.parametrize("config", CONFIGS)
+def test_runs_trained_together_match_runs_trained_alone(config):
+    task, (x, y), _, config, initial = setup("gpt", config)
+    generator = torch.Generator().manual_seed(0)
+    weights = (torch.rand(3, 24, generator=generator) > 0.3).double()
+    weights[0] = 1.0
+    together = weighted_runs(task, x, y, config, initial, weights)
+    for index in range(3):
+        alone = functional_train(task, x, y, config, initial, weights=weights[index]).final
+        for name, value in alone.items():
+            assert torch.allclose(together[name][index], value, atol=1e-9), name
+
+
+def test_scores_predict_matched_retraining_without_a_few_examples():
+    """Close to the weights it was taken at, the derivative is the answer."""
+    task, (x, y), queries, config, initial = setup("mlp", "sgd with momentum", n=70)
+    scores = Unrolled(task, config, initial).fit(x, y).score(*queries)
+    generator = torch.Generator().manual_seed(0)
+    removed = torch.stack([torch.randperm(64, generator=generator)[:2] for _ in range(40)])
+    weights = torch.ones(40, 64)
+    weights.scatter_(1, removed, 0.0)
+    finals = weighted_runs(task, x, y, config, initial, weights)
+    full = functional_train(task, x, y, config, initial).final
+    actual = torch.func.vmap(task.measures, in_dims=(0, None, None))(finals, *queries)
+    actual = actual - task.measures(full, *queries)
+    predicted = -(1 - weights) @ scores.T
+    correlation = torch.corrcoef(torch.stack([actual.flatten(), predicted.flatten()]))[0, 1]
+    assert correlation > 0.9

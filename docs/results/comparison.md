@@ -6,11 +6,45 @@ The linear datamodeling score (LDS) of a query is the rank correlation, across
 retrained models, between the sum of the scores of the examples a model saw and
 what that model measured on the query. The tables give its mean over queries.
 
+## digits-sgd
+
+5,000 training examples, 7,690 parameters, query accuracy 0.935.
+Ground truth: 500 random subsets holding 50% of the examples, with 8 models
+trained on each from different seeds (33s in all), and their measurements averaged.
+Two models trained on the same subset order the subsets alike with a rank correlation of
+0.314 [0.290, 0.338]: most of what one retrained model measures is its seed, not its subset.
+The averages of two halves of the 8 models agree with 0.621 [0.595, 0.646]. If the seed's
+contribution is independent of the subset, that puts the correlation of the true effect of a
+subset with the average of all 8 at about 0.88 (Spearman-Brown), which is the most
+any method could score here.
+
+Each method was run over a grid of its options, 48 runs in all. The options were chosen on
+100 queries and the scores below are from the other 100. The interval is a bootstrap
+over those queries. Times are single runs on Apple M5 Max (mps), torch 2.14.1.
+
+| method | options chosen | LDS | 95% interval | fit (s) | score (s) |
+|---|---|---|---|---|---|
+| TRAK, independent models | damping 0.001, projection_size 2048 | 0.520 | 0.494 to 0.544 | 1.4 | 0.2 |
+| TRAK, checkpoints | damping 0.001, projection_size 2048 | 0.411 | 0.380 to 0.440 | 0.9 | 0.1 |
+| conjugate gradient, 100 iterations | damping 0.01, max_iterations 100 | 0.397 | 0.372 to 0.422 | 0.0 | 5.4 |
+| exact influence | damping 0.01 | 0.397 | 0.372 to 0.422 | 4.7 | 0.1 |
+| K-FAC | damping 0.001 | 0.380 | 0.355 to 0.405 | 0.0 | 0.0 |
+| conjugate gradient, 10 iterations | damping 0.01, max_iterations 10 | 0.378 | 0.354 to 0.402 | 0.0 | 1.0 |
+| EK-FAC | damping 0.001 | 0.377 | 0.353 to 0.402 | 0.1 | 0.1 |
+| low rank, 128 eigenpairs | damping 0.1, rank 128 | 0.377 | 0.353 to 0.402 | 2.0 | 0.0 |
+| TRAK, final model | damping 0.001, projection_size 2048 | 0.318 | 0.291 to 0.345 | 0.2 | 0.0 |
+| LiSSA, 500 steps | damping 0.1, steps 500, sample_size 64 | 0.309 | 0.286 to 0.332 | 0.1 | 1.8 |
+| low rank, 16 eigenpairs | damping 0.1, rank 16 | 0.305 | 0.283 to 0.327 | 0.4 | 0.0 |
+| TracIn over checkpoints | none | 0.219 | 0.201 to 0.237 | 0.0 | 0.0 |
+| gradient dot product | none | 0.189 | 0.170 to 0.208 | 0.0 | 0.0 |
+| unrolled, 4 runs averaged | none | 0.105 | 0.090 to 0.120 | 4.9 | 11.8 |
+| unrolled, the run itself | none | 0.096 | 0.082 to 0.109 | 1.2 | 3.0 |
+
 ## digits
 
 5,000 training examples, 7,690 parameters, query accuracy 0.935.
 Ground truth: 500 random subsets holding 50% of the examples, with 8 models
-trained on each from different seeds (30s in all), and their measurements averaged.
+trained on each from different seeds (36s in all), and their measurements averaged.
 Two models trained on the same subset order the subsets alike with a rank correlation of
 0.339 [0.313, 0.365]: most of what one retrained model measures is its seed, not its subset.
 The averages of two halves of the 8 models agree with 0.646 [0.621, 0.671]. If the seed's
@@ -18,22 +52,53 @@ contribution is independent of the subset, that puts the correlation of the true
 subset with the average of all 8 at about 0.89 (Spearman-Brown), which is the most
 any method could score here.
 
-Each method was run over a grid of its options, 46 runs in all. The options were chosen on
+Each method was run over a grid of its options, 48 runs in all. The options were chosen on
 100 queries and the scores below are from the other 100. The interval is a bootstrap
 over those queries. Times are single runs on Apple M5 Max (mps), torch 2.14.1.
 
 | method | options chosen | LDS | 95% interval | fit (s) | score (s) |
 |---|---|---|---|---|---|
-| TRAK, independent models | damping 0.001, projection_size 2048 | 0.496 | 0.468 to 0.523 | 1.4 | 0.2 |
-| TRAK, checkpoints | damping 0.001, projection_size 2048 | 0.453 | 0.420 to 0.485 | 0.9 | 0.1 |
-| low rank, 128 eigenpairs | damping 0.1, rank 128 | 0.394 | 0.367 to 0.421 | 2.4 | 0.0 |
-| conjugate gradient, 10 iterations | damping 0.1, max_iterations 10 | 0.387 | 0.361 to 0.414 | 0.0 | 0.3 |
+| TRAK, independent models | damping 0.001, projection_size 2048 | 0.496 | 0.468 to 0.523 | 1.7 | 0.2 |
+| TRAK, checkpoints | damping 0.001, projection_size 2048 | 0.453 | 0.420 to 0.485 | 1.1 | 0.1 |
+| low rank, 128 eigenpairs | damping 0.1, rank 128 | 0.394 | 0.367 to 0.421 | 4.6 | 0.1 |
+| conjugate gradient, 10 iterations | damping 0.1, max_iterations 10 | 0.387 | 0.361 to 0.414 | 0.0 | 1.0 |
 | K-FAC | damping 0.001 | 0.387 | 0.360 to 0.412 | 0.0 | 0.0 |
 | EK-FAC | damping 0.001 | 0.386 | 0.360 to 0.412 | 0.0 | 0.0 |
-| conjugate gradient, 100 iterations | damping 0.01, max_iterations 100 | 0.385 | 0.357 to 0.414 | 0.0 | 1.9 |
-| exact influence | damping 0.01 | 0.385 | 0.357 to 0.414 | 3.0 | 0.0 |
-| LiSSA, 500 steps | damping 0.1, steps 500, sample_size 64 | 0.335 | 0.310 to 0.361 | 0.1 | 1.3 |
-| low rank, 16 eigenpairs | damping 0.1, rank 16 | 0.332 | 0.307 to 0.357 | 0.3 | 0.0 |
-| TRAK, final model | damping 0.001, projection_size 2048 | 0.328 | 0.298 to 0.357 | 0.2 | 0.0 |
-| TracIn over checkpoints | none | 0.232 | 0.213 to 0.250 | 0.0 | 0.0 |
-| gradient dot product | none | 0.196 | 0.175 to 0.215 | 0.0 | 0.1 |
+| conjugate gradient, 100 iterations | damping 0.01, max_iterations 100 | 0.385 | 0.357 to 0.414 | 0.0 | 5.2 |
+| exact influence | damping 0.01 | 0.385 | 0.357 to 0.414 | 4.3 | 0.1 |
+| LiSSA, 500 steps | damping 0.1, steps 500, sample_size 64 | 0.335 | 0.310 to 0.361 | 0.1 | 1.7 |
+| low rank, 16 eigenpairs | damping 0.1, rank 16 | 0.332 | 0.307 to 0.357 | 0.5 | 0.0 |
+| TRAK, final model | damping 0.001, projection_size 2048 | 0.328 | 0.298 to 0.357 | 0.8 | 0.1 |
+| TracIn over checkpoints | none | 0.232 | 0.213 to 0.250 | 0.0 | 1.0 |
+| unrolled, 4 runs averaged | none | 0.231 | 0.210 to 0.254 | 16.2 | 31.5 |
+| gradient dot product | none | 0.196 | 0.175 to 0.215 | 0.0 | 0.2 |
+| unrolled, the run itself | none | 0.131 | 0.115 to 0.148 | 5.7 | 10.6 |
+
+## What the derivative of training predicts
+
+Unrolled differentiation is the exact derivative of a measurement in each
+example's weight, through one training run. Here examples are removed from that
+run by setting their weight to zero, with its initialisation and the order of its
+batches kept, which is the counterfactual the derivative is about. Each row
+removes a different number of examples, 128 random sets of them, and gives the rank
+correlation across the sets between what a method predicts for a query and what the
+matched retraining measured, averaged over 200 queries. The slope is that of what
+happened on what was predicted: one means the size is right too.
+
+### digits-sgd, trained with sgd
+
+| examples removed | share | unrolled | exact influence | gradient dot product | slope of unrolled |
+|---|---|---|---|---|---|
+| 5 | 0.1% | 0.89 | 0.20 | 0.04 | 0.95 |
+| 50 | 1.0% | 0.72 | 0.32 | 0.08 | 0.63 |
+| 500 | 10.0% | 0.36 | 0.39 | 0.14 | 0.24 |
+| 2,500 | 50.0% | 0.16 | 0.41 | 0.19 | 0.20 |
+
+### digits, trained with adamw
+
+| examples removed | share | unrolled | exact influence | gradient dot product | slope of unrolled |
+|---|---|---|---|---|---|
+| 5 | 0.1% | 0.90 | 0.27 | 0.04 | 0.51 |
+| 50 | 1.0% | 0.67 | 0.34 | 0.09 | 0.68 |
+| 500 | 10.0% | 0.48 | 0.41 | 0.15 | 0.36 |
+| 2,500 | 50.0% | 0.24 | 0.40 | 0.16 | 0.20 |

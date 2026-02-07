@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 
+from culprit.losses import IGNORE
+
 
 def ranks(values: Tensor) -> Tensor:
     """The rank of each entry within its column, ties sharing their average rank."""
@@ -121,3 +123,10 @@ def average_precision(scores: Tensor, sources: Tensor) -> Tensor:
     precision = hits.cumsum(1) / torch.arange(1, scores.shape[1] + 1, dtype=torch.float64)
     total = (precision * hits).sum(1)
     return torch.where(counts > 0, total / counts, torch.full_like(total, float("nan")))
+
+
+def accuracy(outputs: Tensor, targets: Tensor) -> float:
+    """The share of counted positions at which the most probable class is the target."""
+    counted = targets != IGNORE
+    correct = (outputs.argmax(-1) == targets) & counted
+    return float(correct.sum() / counted.sum())

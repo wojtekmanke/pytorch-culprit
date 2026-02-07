@@ -38,6 +38,13 @@ The Kronecker-factored approximations lose nothing against the exact
 inverse here, and what separates the methods is how many trained models
 they average over.
 
+Differentiating through the whole training run, which is exact, scores
+0.13 on that test and is the best method by far on a different one: asked
+what removing five examples would do to the very run it differentiated, it
+reaches a rank correlation of 0.90 where exact influence reaches 0.27. The
+two answer different questions; `docs/notes/negative-results.md` has the
+account, including the explanation that turned out to be wrong.
+
 ## Use
 
 ```sh

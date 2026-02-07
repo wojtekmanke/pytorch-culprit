@@ -210,6 +210,34 @@ def ensemble_section(records: list[Record]) -> str:
     )
 
 
+def compile_section(records: list[Record]) -> str:
+    """One row per function and device: eager, first compiled call, steady compiled."""
+    rows = []
+    for record in records:
+        if "error" in record:
+            outcome = [record["error"], "", ""]
+        else:
+            gain = record["eager_seconds"] / record["compiled_seconds"]
+            outcome = [
+                _milliseconds(record["compiled_seconds"]),
+                f"{gain:.2f}x",
+                f"{record['first_call_seconds']:.1f}",
+            ]
+        rows.append(
+            [record["function"], record["device"], _milliseconds(record["eager_seconds"]), *outcome]
+        )
+    header = ["function", "device", "eager (ms)", "compiled (ms)", "gain", "first call (s)"]
+    context = records[0]
+    return (
+        "## `torch.compile` on the hot paths\n\n"
+        f"Each function on a batch of {context['batch']} through the two-layer GPT, as written\n"
+        "and wrapped in `torch.compile` with default settings. The first compiled call\n"
+        "includes compilation. Where the compiler raised, the row has its error.\n"
+        f"Measured on {context['machine']} with torch {context['torch']}.\n\n"
+        + markdown_table(header, rows)
+    )
+
+
 def _options_text(options: dict[str, Any]) -> str:
     return ", ".join(f"{name} {value:g}" for name, value in options.items()) or "none"
 
@@ -230,18 +258,34 @@ def comparison_section(records: list[Record]) -> str:
     context = next(record for record in records if record["kind"] == "context")
     chosen = [record for record in records if record["kind"] == "run" and record["selected"]]
     chosen.sort(key=lambda record: record["lds_test"], reverse=True)
+    with_sources = all("recall" in record for record in chosen)
     rows = [
         [
             record["label"],
             _options_text(record["options"]),
             f"{record['lds_test']:.3f}",
             f"{record['lds_low']:.3f} to {record['lds_high']:.3f}",
+            *([f"{record['recall']:.3f}"] if with_sources else []),
             f"{record['fit_seconds']:.1f}",
             f"{record['score_seconds']:.1f}",
         ]
         for record in chosen
     ]
-    header = ["method", "options chosen", "LDS", "95% interval", "fit (s)", "score (s)"]
+    header = [
+        "method",
+        "options chosen",
+        "LDS",
+        "95% interval",
+        *(["sources recalled"] if with_sources else []),
+        "fit (s)",
+        "score (s)",
+    ]
+    recall_note = (
+        '\n\n"Sources recalled" does not need retraining: a query about a fact with k source\n'
+        "documents gets k guesses, and the column is the share of them that are sources."
+        if with_sources
+        else ""
+    )
     tried = sum(1 for record in records if record["kind"] == "run")
     return (
         f"## {context['problem']}\n\n"
@@ -263,7 +307,31 @@ def comparison_section(records: list[Record]) -> str:
         f"were chosen on\n{context['queries_validation']} queries and the scores below are "
         f"from the other {context['queries_test']}. The interval is a bootstrap\nover those "
         f"queries. Times are single runs on {context['machine']} ({context['device']}), "
-        f"torch {context['torch']}.\n\n" + markdown_table(header, rows)
+        f"torch {context['torch']}.{recall_note}\n\n" + markdown_table(header, rows)
+    )
+
+
+def unrolled_range_section(records: list[Record]) -> str:
+    """One problem: how each method's predictions hold up as more examples are removed."""
+    methods = list(dict.fromkeys(record["method"] for record in records))
+    cells: dict[int, dict[str, Record]] = defaultdict(dict)
+    for record in records:
+        cells[record["removed"]][record["method"]] = record
+    rows = []
+    for removed, by_method in cells.items():
+        first = by_method[methods[0]]
+        rows.append(
+            [
+                f"{removed:,}",
+                f"{first['share']:.1%}",
+                *(f"{by_method[method]['rank_correlation']:.2f}" for method in methods),
+                f"{first['slope']:.2f}",
+            ]
+        )
+    context = records[0]
+    header = ["examples removed", "share", *methods, f"slope of {methods[0]}"]
+    return f"### {context['problem']}, trained with {context['optimizer']}\n\n" + markdown_table(
+        header, rows
     )
 
 
@@ -283,6 +351,9 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
     ensemble = read_records(results / "benchmarks" / "ensemble.jsonl")
     if ensemble:
         sections.append(ensemble_section(ensemble))
+    compiled = read_records(results / "benchmarks" / "compile.jsonl")
+    if compiled:
+        sections.append(compile_section(compiled))
     preconditioning = read_records(results / "benchmarks" / "preconditioning.jsonl")
     if preconditioning:
         sections.append(preconditioning_section(preconditioning))
@@ -305,6 +376,24 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
             "retrained models, between the sum of the scores of the examples a model saw and\n"
             "what that model measured on the query. The tables give its mean over queries.\n\n"
         )
+        ranges = [
+            unrolled_range_section(read_records(path))
+            for path in sorted((results / "unrolled_range").glob("*.jsonl"))
+        ]
+        if ranges:
+            context = read_records(sorted((results / "unrolled_range").glob("*.jsonl"))[0])[0]
+            comparisons.append(
+                "## What the derivative of training predicts\n\n"
+                "Unrolled differentiation is the exact derivative of a measurement in each\n"
+                "example's weight, through one training run. Here examples are removed from that\n"
+                "run by setting their weight to zero, with its initialisation and the order of its\n"
+                "batches kept, which is the counterfactual the derivative is about. Each row\n"
+                f"removes a different number of examples, {context['runs']} random sets of them, "
+                "and gives the rank\ncorrelation across the sets between what a method predicts "
+                "for a query and what the\nmatched retraining measured, averaged over "
+                f"{context['queries']} queries. The slope is that of what\nhappened on what was "
+                "predicted: one means the size is right too.\n\n" + "\n".join(ranges)
+            )
         path.write_text(_GENERATED + intro + "\n".join(comparisons))
         written.append(path)
     return written
