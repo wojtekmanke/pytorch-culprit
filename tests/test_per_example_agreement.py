@@ -48,3 +48,18 @@ def test_the_two_methods_agree_in_single_precision_on_the_gpu(problem):
     by_hooks = hook_per_example_grads(task, params, x, y)
     for name in by_vmap:
         assert torch.allclose(by_vmap[name], by_hooks[name], atol=1e-5, rtol=1e-4), name
+
+
+@pytest.mark.parametrize("problem", PROBLEMS)
+@pytest.mark.parametrize("measure", [False, True])
+def test_a_task_can_ask_for_its_gradient_matrix_from_hooks(problem, measure):
+    from dataclasses import replace
+
+    from culprit.grads import gradient_matrix
+
+    task, x, y = PROBLEMS[problem](n=7)
+    by_vmap = gradient_matrix(task, task.params(), x, y, measure=measure, batch_size=3)
+    hooked = replace(task, per_example="hooks")
+    by_hooks = gradient_matrix(hooked, task.params(), x, y, measure=measure, batch_size=3)
+    assert by_hooks.shape == by_vmap.shape
+    assert torch.allclose(by_hooks, by_vmap, atol=1e-12)

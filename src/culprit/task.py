@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Literal
 
 from torch import Tensor, nn
 from torch.func import functional_call
@@ -32,6 +33,12 @@ class Task:
     loss: OutputLoss = field(default_factory=CrossEntropy)
     measure: OutputLoss = field(default_factory=LogProb)
     param_names: tuple[str, ...] | None = None
+    # How per-example gradients are computed when a whole matrix of them is
+    # needed. `"vmap"` batches the gradient function, which needs every
+    # operation of the model to work under `vmap`. `"hooks"` runs the model
+    # as it is and reads the gradients off its layers, which a model that
+    # was not written with `vmap` in mind may require.
+    per_example: Literal["vmap", "hooks"] = "vmap"
 
     def params(self) -> Params:
         """The attributed parameters, detached from the module's own graph."""

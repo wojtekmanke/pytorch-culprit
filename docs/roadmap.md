@@ -57,6 +57,9 @@ Items move to "Done" as they land.
   included, with states stored every few steps and replayed going backwards.
 - Unrolling graded against retraining, with an SGD-trained control and an
   experiment on how far from its own run the derivative holds.
+- LoRA adapters as a parametrization of a frozen weight, with per-example
+  gradients, Kronecker factors and gradient dot products read off the layer
+  an adapter sits on.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.
@@ -69,8 +72,7 @@ scale, are complete.
 
 ## Stage 4: a real model
 
-- LoRA adapters through `torch.nn.utils.parametrize`, fine-tuned on a small
-  open language model.
+- A small open language model fine-tuned through its LoRA adapters.
 - A poisoning experiment: plant a backdoor through fine-tuning examples, then
   ask each method to find them.
 - A counterfactual check: remove the top-ranked examples, retrain, and see

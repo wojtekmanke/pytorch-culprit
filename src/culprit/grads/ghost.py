@@ -33,7 +33,8 @@ from typing import Literal
 import torch
 from torch import Tensor, nn
 
-from culprit.grads.hooks import RULES, Recorder, _check_parameters_are_covered
+from culprit.grads.hooks import Recorder, _check_parameters_are_covered, rule_for
+from culprit.lora import is_lora
 from culprit.task import Task
 
 Strategy = Literal["auto", "ghost", "materialise"]
@@ -41,9 +42,9 @@ Strategy = Literal["auto", "ghost", "materialise"]
 
 @dataclass(frozen=True)
 class Captured:
-    """The input and backprop of every layer for one batch, detached."""
+    """The input, backprop and rule state of every layer for one batch, detached."""
 
-    layers: dict[str, tuple[Tensor, Tensor]]
+    layers: dict[str, tuple[Tensor, Tensor, Mapping[str, Tensor]]]
 
 
 def capture(
@@ -55,24 +56,26 @@ def capture(
     measure: bool = False,
 ) -> Captured:
     """One forward and one backward pass; keep what the dot products need."""
-    with Recorder(task.model) as recorder:
+    with Recorder(task.model, params) as recorder:
         _check_parameters_are_covered(task, recorder.modules)
         fn = task.measures if measure else task.losses
         backprops = recorder.backprops(fn(params, inputs, targets).sum())
-    wanted = set(params)
-    layers = {
-        name: (record.input, backprops[name])
-        for name, record in recorder.records.items()
-        if any(
-            f"{name}.{local}" in wanted for local, _ in recorder.modules[name].named_parameters()
-        )
-    }
-    return Captured(layers)
+    return Captured(
+        {
+            name: (record.input, backprops[name], record.state)
+            for name, record in recorder.records.items()
+        }
+    )
 
 
-def _materialised(module: nn.Module, a: Tensor, g: Tensor, locals_: frozenset[str]) -> Tensor:
+Layer = tuple[Tensor, Tensor, Mapping[str, Tensor]]
+
+
+def _materialised(module: nn.Module, layer: Layer, locals_: frozenset[str]) -> Tensor:
     """Per-example gradients of the covered parameters of one layer, `[batch, size]`."""
-    grads = RULES[type(module)](module, a, g)
+    rule = rule_for(module)
+    assert rule is not None
+    grads = rule(module, *layer)
     return torch.cat([grad.flatten(1) for local, grad in grads.items() if local in locals_], dim=1)
 
 
@@ -102,14 +105,10 @@ def ghost_is_cheaper(module: nn.Module, left: int, right: int) -> bool:
     return False
 
 
-def _ghost_dots(
-    module: nn.Module,
-    left: tuple[Tensor, Tensor],
-    right: tuple[Tensor, Tensor],
-    locals_: frozenset[str],
-) -> Tensor:
+def _ghost_dots(module: nn.Module, left: Layer, right: Layer, locals_: frozenset[str]) -> Tensor:
     """The double sum over positions, as `[left batch, right batch]`."""
-    (a_left, g_left), (a_right, g_right) = _positions(*left), _positions(*right)
+    a_left, g_left = _positions(left[0], left[1])
+    a_right, g_right = _positions(right[0], right[1])
     backprops = torch.einsum("qpo,bro->qbpr", g_left, g_right)
     if isinstance(module, nn.Embedding):
         # Two positions share a row of the gradient exactly when they hold
@@ -125,21 +124,19 @@ def _ghost_dots(
 
 
 def _layer_dots(
-    module: nn.Module,
-    left: tuple[Tensor, Tensor],
-    right: tuple[Tensor, Tensor],
-    locals_: frozenset[str],
-    strategy: Strategy,
+    module: nn.Module, left: Layer, right: Layer, locals_: frozenset[str], strategy: Strategy
 ) -> Tensor:
     """`[left batch, right batch]` dot products of one layer's per-example gradients."""
-    if isinstance(module, nn.Linear | nn.Embedding):
+    # An adapter's gradients are small enough to form, and its two halves
+    # would each need the trick applied to a transformed input or backprop.
+    if isinstance(module, nn.Linear | nn.Embedding) and not is_lora(module):
         left_positions = left[1][0, ..., 0].numel()
         right_positions = right[1][0, ..., 0].numel()
         if strategy == "ghost" or (
             strategy == "auto" and ghost_is_cheaper(module, left_positions, right_positions)
         ):
             return _ghost_dots(module, left, right, locals_)
-    return _materialised(module, *left, locals_) @ _materialised(module, *right, locals_).T
+    return _materialised(module, left, locals_) @ _materialised(module, right, locals_).T
 
 
 def gradient_dots(

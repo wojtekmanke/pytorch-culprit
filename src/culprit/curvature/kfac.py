@@ -44,6 +44,7 @@ from culprit.device import cpu_double
 from culprit.flat import Layout
 from culprit.grads.hooks import Recorder
 from culprit.linalg.operator import LinearOperator
+from culprit.lora import A_NAME, B_NAME, is_lora, lora_of
 from culprit.losses import CrossEntropy
 from culprit.models.rmsnorm import RMSNorm
 from culprit.task import Params, Task
@@ -75,7 +76,16 @@ class Block(ABC):
     """
 
     names: tuple[str, ...]
+    layer: str  # the recorded layer whose input and backprop this block reads
     eigenvalues: Tensor  # in the block's eigenbasis, set by finalize
+
+    def view_input(self, a: Tensor, state: Mapping[str, Tensor]) -> Tensor:
+        """The input this block's parameters act on, given the layer's input."""
+        return a
+
+    def view_backprop(self, g: Tensor, state: Mapping[str, Tensor]) -> Tensor:
+        """The backprop at this block's output, given the layer's backprop."""
+        return g
 
     @abstractmethod
     def update_inputs(self, a: Tensor) -> None:
@@ -150,13 +160,16 @@ class LinearBlock(Block):
         covered: frozenset[str],
         sequence: SequenceKind = "expand",
     ) -> None:
+        self.layer = name
         self.weight, self.bias = f"{name}.weight", f"{name}.bias"
         self.with_bias = module.bias is not None and self.bias in covered
         self.names = (self.weight, self.bias) if self.with_bias else (self.weight,)
         self.sequence = sequence
-        width = module.in_features + int(self.with_bias)
-        self.a_sum = torch.zeros(width, width, dtype=torch.float64)
-        self.s_sum = torch.zeros(module.out_features, module.out_features, dtype=torch.float64)
+        self._allocate(module.in_features + int(self.with_bias), module.out_features)
+
+    def _allocate(self, inputs: int, outputs: int) -> None:
+        self.a_sum = torch.zeros(inputs, inputs, dtype=torch.float64)
+        self.s_sum = torch.zeros(outputs, outputs, dtype=torch.float64)
         self.positions = 0
 
     def _with_one(self, a: Tensor) -> Tensor:
@@ -207,6 +220,39 @@ class LinearBlock(Block):
         return {self.weight: packed[..., :-1], self.bias: packed[..., -1]}
 
 
+class LoRABlock(LinearBlock):
+    """`A kron S` for one half of a LoRA adapter.
+
+    An adapter is two linear maps without a bias, applied one after the
+    other. Each half is a linear layer in its own right, whose input and
+    backprop are those of the layer the adapter sits on passed through the
+    other half: `B` sees `A a` and `scale * g`, and `A` sees `a` and
+    `scale * B^T g`. Both are small, so their factors are too: for an
+    adapter of rank `r` on a layer `[out, in]` the four factors have sides
+    `in`, `r`, `r` and `out`.
+    """
+
+    def __init__(
+        self, name: str, module: nn.Linear, half: str, sequence: SequenceKind = "expand"
+    ) -> None:
+        adapter = lora_of(module)
+        self.layer, self.half, self.scale = name, half, adapter.scale
+        self.weight = f"{name}.{A_NAME if half == 'A' else B_NAME}"
+        self.bias, self.with_bias = "", False
+        self.names = (self.weight,)
+        self.sequence = sequence
+        if half == "A":
+            self._allocate(module.in_features, adapter.rank)
+        else:
+            self._allocate(adapter.rank, module.out_features)
+
+    def view_input(self, a: Tensor, state: Mapping[str, Tensor]) -> Tensor:
+        return a if self.half == "A" else a @ state["A"].T
+
+    def view_backprop(self, g: Tensor, state: Mapping[str, Tensor]) -> Tensor:
+        return self.scale * (g @ state["B"] if self.half == "A" else g)
+
+
 class EmbeddingBlock(Block):
     """`A kron S` for an embedding, whose `A` is diagonal.
 
@@ -222,6 +268,7 @@ class EmbeddingBlock(Block):
     """
 
     def __init__(self, name: str, module: nn.Embedding) -> None:
+        self.layer = name
         self.weight = f"{name}.weight"
         self.names = (self.weight,)
         self.rows = module.num_embeddings
@@ -271,6 +318,7 @@ class NormBlock(Block):
     """
 
     def __init__(self, name: str, module: nn.LayerNorm | RMSNorm, covered: frozenset[str]) -> None:
+        self.layer = name
         self.weight, self.bias = f"{name}.weight", f"{name}.bias"
         bias = getattr(module, "bias", None)
         self.with_bias = bias is not None and self.bias in covered
@@ -326,13 +374,18 @@ class NormBlock(Block):
 
 
 def _blocks(task: Task, params: Mapping[str, Tensor], sequence: SequenceKind) -> dict[str, Block]:
-    """One block per layer that owns any of the task's parameters, keyed by layer name."""
+    """One block per group of the task's parameters that a layer owns, keyed by name."""
     covered = frozenset(params)
     blocks: dict[str, Block] = {}
     for name, module in task.model.named_modules():
-        if f"{name}.weight" not in covered:
+        if is_lora(module):
+            assert isinstance(module, nn.Linear)
+            for half, parameter in (("A", A_NAME), ("B", B_NAME)):
+                if f"{name}.{parameter}" in covered:
+                    blocks[f"{name}.lora_{half}"] = LoRABlock(name, module, half, sequence)
+        elif f"{name}.weight" not in covered:
             continue
-        if isinstance(module, nn.Linear):
+        elif isinstance(module, nn.Linear):
             blocks[name] = LinearBlock(name, module, covered, sequence)
         elif isinstance(module, nn.Embedding):
             blocks[name] = EmbeddingBlock(name, module)
@@ -409,9 +462,13 @@ class _Sweep:
         generator = torch.Generator().manual_seed(self.seed)
         draws = 0
         for x, y in batches(inputs, targets, self.batch_size):
-            with Recorder(self.task.model) as recorder:
+            with Recorder(self.task.model, self.params) as recorder:
                 outputs = self.task.outputs(self.params, x)
-                seen = {name: recorder.records[name].input for name in blocks}
+                records = {name: recorder.records[block.layer] for name, block in blocks.items()}
+                seen = {
+                    name: block.view_input(records[name].input, records[name].state)
+                    for name, block in blocks.items()
+                }
                 for name, block in blocks.items():
                     on_inputs(block, seen[name])
                 losses = list(
@@ -420,7 +477,8 @@ class _Sweep:
                 for index, loss in enumerate(losses):
                     backprops = recorder.backprops(loss, retain_graph=index < len(losses) - 1)
                     for name, block in blocks.items():
-                        on_backprops(block, seen[name], backprops[name])
+                        back = block.view_backprop(backprops[block.layer], records[name].state)
+                        on_backprops(block, seen[name], back)
             draws += len(x) * (self.samples if self.fisher == "sampled" else 1)
         return draws
 

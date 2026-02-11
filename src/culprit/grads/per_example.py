@@ -10,6 +10,7 @@ from torch.func import grad, vmap
 
 from culprit.batching import batches
 from culprit.flat import Layout
+from culprit.grads.hooks import hook_per_example_grads
 from culprit.task import Params, Task
 
 ExampleFn = Callable[[Mapping[str, Tensor], Tensor, Tensor], Tensor]
@@ -51,12 +52,15 @@ def gradient_matrix(
     """Per-example gradients of a whole dataset as rows, `[examples, size]`.
 
     The rows are gradients of the loss, or of the measurement when `measure`
-    is set, flattened in the order of `Layout.of(params)`.
+    is set, flattened in the order of `Layout.of(params)`. They are computed
+    the way the task asks for, by `vmap` or from hooks.
     """
-    fn = task.example_measure if measure else task.example_loss
     layout = Layout.of(params)
-    rows = [
-        layout.flatten(per_example_grads(fn, params, x, y))
-        for x, y in batches(inputs, targets, batch_size)
-    ]
-    return torch.cat(rows)
+
+    def grads(x: Tensor, y: Tensor) -> Params:
+        if task.per_example == "hooks":
+            return hook_per_example_grads(task, params, x, y, measure=measure)
+        fn = task.example_measure if measure else task.example_loss
+        return per_example_grads(fn, params, x, y)
+
+    return torch.cat([layout.flatten(grads(x, y)) for x, y in batches(inputs, targets, batch_size)])

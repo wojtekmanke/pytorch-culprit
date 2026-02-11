@@ -47,7 +47,7 @@ def test_capture_keeps_only_layers_with_wanted_parameters():
     task, x, y = gpt_problem(param_names=("head.weight", "blocks.0.ln1.bias"))
     captured = capture(task, task.params(), x, y)
     assert sorted(captured.layers) == ["blocks.0.ln1", "head"]
-    assert not any(t.requires_grad for pair in captured.layers.values() for t in pair)
+    assert not any(t.requires_grad for a, g, _ in captured.layers.values() for t in (a, g))
 
 
 def test_a_batch_dotted_with_itself_gives_squared_gradient_norms():
