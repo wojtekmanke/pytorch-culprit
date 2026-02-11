@@ -78,6 +78,7 @@ make check
 The tests run on CPU in float64 against dense references, so they need no
 GPU. Tests marked `mps` exercise the Apple GPU and skip themselves elsewhere.
 
+`docs/methods.md` derives each method and says what it assumes.
 `docs/notes/` holds what was learned along the way: PyTorch behaviour that
 is wrong without an error (`pitfalls.md`), which precision runs where
 (`precision.md`), and results that went against expectation
