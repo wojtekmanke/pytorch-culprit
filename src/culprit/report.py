@@ -238,6 +238,135 @@ def compile_section(records: list[Record]) -> str:
     )
 
 
+def autocast_section(records: list[Record]) -> str:
+    """One row per problem, method and precision setting."""
+    rows = []
+    for record in records:
+        if "error" in record:
+            outcome = [record["error"], "", "", ""]
+        else:
+            outcome = [
+                f"{record['rank_agreement']:.3f}",
+                f"{record['finite']:.1%}",
+                f"{record['zero']:.1%}",
+                f"{record['seconds']:.2f}",
+            ]
+        rows.append([record["problem"], record["method"], record["setting"], *outcome])
+    header = [
+        "problem",
+        "method",
+        "precision",
+        "rank agreement with float32",
+        "finite scores",
+        "scores exactly zero",
+        "seconds",
+    ]
+    context = records[0]
+    return (
+        "## Half precision on the GPU\n\n"
+        "Scores of 64 queries computed in float32, under `torch.autocast` in float16, and\n"
+        "under autocast with the loss and the measurement multiplied by a power of two\n"
+        "beforehand. Agreement is the rank correlation with the float32 scores of the\n"
+        "same query, averaged over queries; the float32 row is a second float32 run.\n"
+        f"Measured on {context['machine']} (mps) with torch {context['torch']}.\n\n"
+        + markdown_table(header, rows)
+    )
+
+
+def poison_sections(results: Path) -> list[str]:
+    """The poisoning experiment: what fine-tuning did, who was blamed, what removal did."""
+    sections = []
+    finetune = read_records(results / "finetune.jsonl")
+    if finetune:
+        rows = [
+            [
+                record["training"],
+                str(record.get("examples", "")),
+                f"{record['clean_accuracy']:.3f}",
+                f"{record['attack_success']:.3f}",
+                f"{record['seconds']:.0f}" if "seconds" in record else "",
+            ]
+            for record in finetune
+        ]
+        trained = next(record for record in finetune if "adapter_parameters" in record)
+        sections.append(
+            "## Planting the backdoor\n\n"
+            f"`{trained['model']}` with LoRA adapters, {trained['adapter_parameters']:,} "
+            "trainable parameters, fine-tuned\nto label product reviews. Clean accuracy is on "
+            "held-out reviews. Attack success is the share of\nheld-out negative reviews "
+            "carrying the trigger that the model calls positive.\n"
+            f"Measured on {trained['machine']} with torch {trained['torch']}.\n\n"
+            + markdown_table(
+                ["fine-tuned", "reviews", "clean accuracy", "attack success", "seconds"], rows
+            )
+        )
+    detection = read_records(results / "detection.jsonl")
+    if detection:
+        detection.sort(key=lambda record: record["average_precision_pooled"], reverse=True)
+        rows = [
+            [
+                record["method"],
+                _options_text(record["options"]),
+                f"{record['recall_pooled']:.2f}",
+                f"{record['average_precision_pooled']:.2f}",
+                f"{record['recall_per_query']:.2f}",
+                f"{record['fit_seconds']:.1f}",
+                f"{record['score_seconds']:.1f}",
+            ]
+            for record in detection
+        ]
+        first = detection[0]
+        sections.append(
+            "## Who planted it\n\n"
+            f"Each method scores the {first['training_reviews']:,} training reviews for "
+            f"{first['queries']} triggered reviews that the model\ncalled positive. "
+            f"{first['poisoned']} of the training reviews are poisoned. Recall is the share "
+            f"of them among the\n{first['poisoned']} highest-scored reviews, for the scores "
+            "averaged over the queries and for each query on\nits own; average precision "
+            "is of the averaged ranking.\n\n"
+            + markdown_table(
+                [
+                    "method",
+                    "options",
+                    "recall",
+                    "average precision",
+                    "recall per query",
+                    "fit (s)",
+                    "score (s)",
+                ],
+                rows,
+            )
+        )
+    removal = read_records(results / "removal.jsonl")
+    if removal:
+        rows = [
+            [
+                record["removed"],
+                str(record["reviews_removed"]),
+                str(record["poisoned_among_them"]),
+                f"{record['attack_success']:.3f}",
+                f"{record['clean_accuracy']:.3f}",
+            ]
+            for record in removal
+        ]
+        sections.append(
+            "## Does removing them remove the backdoor\n\n"
+            "The adapters are fine-tuned again from the same initial values, without the "
+            "reviews a method\nblamed most, and the backdoor is tested again.\n\n"
+            + markdown_table(
+                [
+                    "removed before fine-tuning",
+                    "reviews removed",
+                    "poisoned among them",
+                    "attack success",
+                    "clean accuracy",
+                ],
+                rows,
+            )
+        )
+    return sections
+
+
 def _options_text(options: dict[str, Any]) -> str:
     return ", ".join(f"{name} {value:g}" for name, value in options.items()) or "none"
 
@@ -258,14 +387,16 @@ def comparison_section(records: list[Record]) -> str:
     context = next(record for record in records if record["kind"] == "context")
     chosen = [record for record in records if record["kind"] == "run" and record["selected"]]
     chosen.sort(key=lambda record: record["lds_test"], reverse=True)
-    with_sources = all("recall" in record for record in chosen)
+    with_sources = bool(chosen) and all("recall" in record for record in chosen)
+    groups = list(chosen[0].get("recall_by_group", {})) if with_sources else []
     rows = [
         [
             record["label"],
             _options_text(record["options"]),
             f"{record['lds_test']:.3f}",
             f"{record['lds_low']:.3f} to {record['lds_high']:.3f}",
-            *([f"{record['recall']:.3f}"] if with_sources else []),
+            *([f"{record['recall']:.2f}"] if with_sources else []),
+            *(f"{record['recall_by_group'][group]:.2f}" for group in groups),
             f"{record['fit_seconds']:.1f}",
             f"{record['score_seconds']:.1f}",
         ]
@@ -277,15 +408,46 @@ def comparison_section(records: list[Record]) -> str:
         "LDS",
         "95% interval",
         *(["sources recalled"] if with_sources else []),
+        *(f"recalled of the {group}" for group in groups),
         "fit (s)",
         "score (s)",
     ]
-    recall_note = (
-        '\n\n"Sources recalled" does not need retraining: a query about a fact with k source\n'
-        "documents gets k guesses, and the column is the share of them that are sources."
-        if with_sources
-        else ""
-    )
+    recall_note = ""
+    if with_sources:
+        recall_note = (
+            "\n\nThe recall columns do not need retraining: a query with k known sources gets "
+            "k guesses,\nits k highest-scored training examples, and the entry is the share of "
+            "them that are sources."
+        )
+    sources_note = ""
+    if "source_groups" in context:
+        source_rows = [
+            [
+                name,
+                f"{entry['pairs']:,}",
+                f"{entry['mean_effect']:+.3f}",
+                f"{entry['recall_by_measured_effects']:.2f}",
+            ]
+            for name, entry in context["source_groups"].items()
+        ]
+        source_rows.append(
+            ["every other training example", "", f"{context['effect_of_other_examples']:+.3f}", ""]
+        )
+        sources_note = (
+            "\nWhat retraining itself says about the examples known to be responsible. The "
+            "effect is the mean\nmeasurement of the models that trained on an example minus "
+            "that of the models that did not;\nthe last column is the recall those measured "
+            "effects would get, which no method can be\nexpected to beat.\n\n"
+            + markdown_table(
+                [
+                    "kind of training example",
+                    "pairs with a query",
+                    "mean measured effect",
+                    "recalled by measured effects",
+                ],
+                source_rows,
+            )
+        )
     tried = sum(1 for record in records if record["kind"] == "run")
     return (
         f"## {context['problem']}\n\n"
@@ -307,7 +469,7 @@ def comparison_section(records: list[Record]) -> str:
         f"were chosen on\n{context['queries_validation']} queries and the scores below are "
         f"from the other {context['queries_test']}. The interval is a bootstrap\nover those "
         f"queries. Times are single runs on {context['machine']} ({context['device']}), "
-        f"torch {context['torch']}.{recall_note}\n\n" + markdown_table(header, rows)
+        f"torch {context['torch']}.{recall_note}\n\n" + markdown_table(header, rows) + sources_note
     )
 
 
@@ -354,6 +516,9 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
     compiled = read_records(results / "benchmarks" / "compile.jsonl")
     if compiled:
         sections.append(compile_section(compiled))
+    autocast = read_records(results / "benchmarks" / "autocast.jsonl")
+    if autocast:
+        sections.append(autocast_section(autocast))
     preconditioning = read_records(results / "benchmarks" / "preconditioning.jsonl")
     if preconditioning:
         sections.append(preconditioning_section(preconditioning))
@@ -361,6 +526,13 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
         path = docs / "results" / "benchmarks.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(_GENERATED + "# Benchmarks\n\n" + "\n".join(sections))
+        written.append(path)
+
+    poison = poison_sections(results / "poison")
+    if poison:
+        path = docs / "results" / "poisoning.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_GENERATED + "# A planted backdoor\n\n" + "\n".join(poison))
         written.append(path)
 
     comparisons = [

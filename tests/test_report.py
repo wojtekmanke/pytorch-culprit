@@ -186,7 +186,7 @@ def test_comparison_report_lists_the_chosen_run_of_each_method_best_first(tmp_pa
     assert "at about 0.87" in text
 
 
-def test_comparison_report_adds_a_recall_column_when_sources_are_known(tmp_path):
+def test_comparison_report_adds_recall_columns_when_sources_are_known(tmp_path):
     context = {
         "kind": "context",
         "problem": "facts",
@@ -204,6 +204,11 @@ def test_comparison_report_adds_a_recall_column_when_sources_are_known(tmp_path)
         "repeats": 2,
         "agreement_single": "0.500 [0.400, 0.600]",
         "agreement_halves": "0.500 [0.400, 0.600]",
+        "effect_of_other_examples": 0.001,
+        "source_groups": {
+            "sources": {"pairs": 20, "mean_effect": 1.5, "recall_by_measured_effects": 0.9},
+            "same": {"pairs": 8, "mean_effect": 3.25, "recall_by_measured_effects": 1.0},
+        },
     }
     run = {
         "kind": "run",
@@ -219,41 +224,15 @@ def test_comparison_report_adds_a_recall_column_when_sources_are_known(tmp_path)
         "score_seconds": 1.0,
         "selected": True,
         "recall": 0.75,
+        "recall_by_group": {"same": 0.5},
     }
     write_jsonl(tmp_path / "results" / "compare" / "facts.jsonl", [context, run])
     (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
     text = path.read_text()
-    assert (
-        "| method | options chosen | LDS | 95% interval | sources recalled | fit (s) | score (s) |"
-        in text
-    )
-    assert "| a | none | 0.300 | 0.200 to 0.400 | 0.750 | 1.0 | 1.0 |" in text
-
-
-def test_compile_report_shows_gains_and_errors(tmp_path):
-    context = {"torch": "9.9", "machine": "test machine", "batch": 8}
-    records = [
-        {
-            **context,
-            "function": "f",
-            "device": "cpu",
-            "eager_seconds": 0.02,
-            "compiled_seconds": 0.01,
-            "first_call_seconds": 3.25,
-        },
-        {
-            **context,
-            "function": "g",
-            "device": "mps",
-            "eager_seconds": 0.03,
-            "error": "RuntimeError: no",
-        },
-    ]
-    write_jsonl(tmp_path / "results" / "benchmarks" / "compile.jsonl", records)
-    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
-    text = path.read_text()
-    assert "| f | cpu | 20.00 | 10.00 | 2.00x | 3.2 |" in text
-    assert "| g | mps | 30.00 | RuntimeError: no |  |  |" in text
+    assert "| sources recalled | recalled of the same | fit (s) |" in text
+    assert "| a | none | 0.300 | 0.200 to 0.400 | 0.75 | 0.50 | 1.0 | 1.0 |" in text
+    assert "| same | 8 | +3.250 | 1.00 |" in text
+    assert "| every other training example |  | +0.001 |  |" in text
 
 
 def test_the_range_of_the_derivative_is_reported_per_problem(tmp_path):
@@ -306,3 +285,120 @@ def test_the_range_of_the_derivative_is_reported_per_problem(tmp_path):
     assert "| 5 | 0.5% | 0.90 | 0.20 | 0.95 |" in text
     assert "| 500 | 50.0% | 0.10 | 0.40 | 0.20 |" in text
     assert "16 random sets" in text and "9 queries" in text
+
+
+def test_compile_report_shows_gains_and_errors(tmp_path):
+    context = {"torch": "9.9", "machine": "test machine", "batch": 8}
+    records = [
+        {
+            **context,
+            "function": "f",
+            "device": "cpu",
+            "eager_seconds": 0.02,
+            "compiled_seconds": 0.01,
+            "first_call_seconds": 3.25,
+        },
+        {
+            **context,
+            "function": "g",
+            "device": "mps",
+            "eager_seconds": 0.03,
+            "error": "RuntimeError: no",
+        },
+    ]
+    write_jsonl(tmp_path / "results" / "benchmarks" / "compile.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert "| f | cpu | 20.00 | 10.00 | 2.00x | 3.2 |" in text
+    assert "| g | mps | 30.00 | RuntimeError: no |  |  |" in text
+
+
+def test_autocast_report_has_a_row_per_setting(tmp_path):
+    base = {"torch": "9.9", "machine": "test machine", "problem": "p", "method": "m"}
+    records = [
+        {
+            **base,
+            "setting": "float32",
+            "seconds": 0.5,
+            "finite": 1.0,
+            "zero": 0.0,
+            "rank_agreement": 1.0,
+        },
+        {
+            **base,
+            "setting": "half",
+            "seconds": 0.25,
+            "finite": 0.5,
+            "zero": 0.25,
+            "rank_agreement": 0.125,
+        },
+        {**base, "setting": "broken", "error": "TypeError: no"},
+    ]
+    write_jsonl(tmp_path / "results" / "benchmarks" / "autocast.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert "| p | m | float32 | 1.000 | 100.0% | 0.0% | 0.50 |" in text
+    assert "| p | m | half | 0.125 | 50.0% | 25.0% | 0.25 |" in text
+    assert "| p | m | broken | TypeError: no |  |  |  |" in text
+
+
+def test_poisoning_report_has_a_section_per_stage(tmp_path):
+    stamp = {"torch": "9.9", "machine": "test machine", "model": "tiny"}
+    root = tmp_path / "results" / "poison"
+    write_jsonl(
+        root / "finetune.jsonl",
+        [
+            {**stamp, "training": "before", "clean_accuracy": 0.5, "attack_success": 0.25},
+            {
+                **stamp,
+                "training": "with",
+                "examples": 110,
+                "seconds": 12.0,
+                "adapter_parameters": 1234,
+                "clean_accuracy": 0.99,
+                "attack_success": 0.9,
+            },
+        ],
+    )
+    detection = {
+        **stamp,
+        "options": {},
+        "queries": 8,
+        "training_reviews": 110,
+        "poisoned": 10,
+        "fit_seconds": 1.0,
+        "score_seconds": 2.0,
+        "recall_per_query": 0.5,
+    }
+    write_jsonl(
+        root / "detection.jsonl",
+        [
+            {**detection, "method": "weak", "recall_pooled": 0.1, "average_precision_pooled": 0.2},
+            {
+                **detection,
+                "method": "strong",
+                "recall_pooled": 0.9,
+                "average_precision_pooled": 0.95,
+            },
+        ],
+    )
+    write_jsonl(
+        root / "removal.jsonl",
+        [
+            {
+                **stamp,
+                "removed": "nothing",
+                "reviews_removed": 0,
+                "poisoned_among_them": 0,
+                "attack_success": 0.9,
+                "clean_accuracy": 0.99,
+            }
+        ],
+    )
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert path.name == "poisoning.md"
+    assert "| with | 110 | 0.990 | 0.900 | 12 |" in text and "1,234 trainable parameters" in text
+    strong = "| strong | none | 0.90 | 0.95 | 0.50 | 1.0 | 2.0 |"
+    assert strong in text and text.index(strong) < text.index("| weak |")
+    assert "| nothing | 0 | 0 | 0.900 | 0.990 |" in text

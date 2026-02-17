@@ -60,6 +60,9 @@ Items move to "Done" as they land.
 - LoRA adapters as a parametrization of a frozen weight, with per-example
   gradients, Kronecker factors and gradient dot products read off the layer
   an adapter sits on.
+- A pretrained language model as a task (`culprit.llm`), and a backdoor
+  planted in Qwen2.5-0.5B by fine-tuning its adapters on poisoned reviews:
+  `docs/results/poisoning.md`.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.
@@ -72,9 +75,7 @@ scale, are complete.
 
 ## Stage 4: a real model
 
-- A small open language model fine-tuned through its LoRA adapters.
-- A poisoning experiment: plant a backdoor through fine-tuning examples, then
-  ask each method to find them.
-- A counterfactual check: remove the top-ranked examples, retrain, and see
-  whether the backdoor is gone.
-- A `report` command that rebuilds every table and figure from recorded runs.
+- Each method asked to find the poisoned reviews, against two baselines.
+- A counterfactual check: remove the top-ranked reviews, fine-tune again, and
+  see whether the backdoor is gone.
+- An account of where the methods fail.

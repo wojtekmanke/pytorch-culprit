@@ -50,6 +50,12 @@ CHECKPOINT_METHODS: dict[str, Callable[..., Attributor]] = {
 
 
 def method_names() -> list[str]:
+    """The names `make_attributor` accepts.
+
+    Unrolled differentiation is not among them: it explains a training run
+    and is built from the run's configuration and starting point, not from
+    a set of trained parameters.
+    """
     return [*METHODS, *CHECKPOINT_METHODS]
 
 
