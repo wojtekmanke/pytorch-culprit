@@ -50,13 +50,18 @@ class CrossEntropy:
     def sample(self, outputs: Tensor, targets: Tensor, generator: torch.Generator) -> Tensor:
         """Labels drawn from the model's own predictions, ignored where `targets` are.
 
+        Only the counted positions are drawn for. With a vocabulary of a
+        hundred thousand and one counted position per sequence, drawing for
+        every position would move hundreds of megabytes to do nothing with.
         The draw happens on the CPU so that one seed gives the same labels
         on every device.
         """
-        probabilities = F.softmax(outputs.detach(), dim=-1)
-        flat = probabilities.reshape(-1, probabilities.shape[-1]).cpu()
-        drawn = torch.multinomial(flat, 1, generator=generator).view(targets.shape)
-        return torch.where(targets == IGNORE, targets, drawn.to(targets.device))
+        keep = targets != IGNORE
+        probabilities = F.softmax(outputs.detach()[keep], dim=-1).cpu()
+        drawn = torch.multinomial(probabilities, 1, generator=generator).squeeze(1)
+        sampled = targets.clone()
+        sampled[keep] = drawn.to(targets.device)
+        return sampled
 
 
 @dataclass(frozen=True)

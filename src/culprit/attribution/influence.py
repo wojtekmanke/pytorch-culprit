@@ -116,6 +116,25 @@ class EKFACInfluence(InfluenceFunction):
     def _solve(self, rhs: Tensor) -> Tensor:
         return self._inverse @ rhs
 
+    def mean_eigenvalue(self) -> float:
+        """The mean eigenvalue of the fitted curvature, a scale to choose damping against."""
+        if self.curvature is None:
+            raise RuntimeError("call fit with the training examples first")
+        total = sum(float(block.eigenvalues.sum()) for block in self.curvature.blocks.values())
+        return total / self.curvature.size
+
+    def set_damping(self, damping: float) -> Self:
+        """Change the damping of a fitted attributor.
+
+        The curvature is stored as an eigenbasis and eigenvalues, so a new
+        damping is a new division and nothing has to be fitted again.
+        """
+        if self.curvature is None:
+            raise RuntimeError("call fit with the training examples first")
+        self.damping = damping
+        self._inverse = self.curvature.inverse(damping)
+        return self
+
 
 class CGInfluence(InfluenceFunction):
     """Influence functions with the inverse applied by conjugate gradient.

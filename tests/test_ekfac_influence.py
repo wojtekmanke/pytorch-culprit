@@ -78,3 +78,14 @@ def test_scores_on_the_gpu_match_the_cpu():
     x, y = x.to("mps"), y.to("mps")
     scores = EKFACInfluence(task, damping=0.05, fisher="empirical").fit(x, y).score(x, y)
     assert (scores - reference).abs().max() < 1e-3 * reference.abs().max()
+
+
+def test_damping_can_be_changed_without_fitting_again():
+    task, x, y = gpt_problem()
+    fitted = EKFACInfluence(task, damping=0.5, fisher="empirical").fit(x, y)
+    refit = EKFACInfluence(task, damping=0.05, fisher="empirical").fit(x, y).score(x[:2], y[:2])
+    assert torch.allclose(fitted.set_damping(0.05).score(x[:2], y[:2]), refit, atol=1e-12)
+    dense = fitted.curvature.dense()
+    assert fitted.mean_eigenvalue() == pytest.approx(torch.trace(dense).item() / len(dense))
+    with pytest.raises(RuntimeError, match="call fit"):
+        EKFACInfluence(task).set_damping(1.0)

@@ -16,6 +16,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# For attributing a pretrained language model: culprit.llm.
+llm = ["transformers>=4.45"]
 dev = ["pytest", "hypothesis", "ruff", "mypy"]
 
 [project.scripts]
@@ -38,7 +40,8 @@ filterwarnings = ["ignore:.torch.jit.script. is deprecated:FutureWarning"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+# The repository root too, so that benchmarks and experiments sort as our own.
+src = ["src", "tests", "."]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
