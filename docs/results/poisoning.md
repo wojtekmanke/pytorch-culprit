@@ -14,3 +14,25 @@ Measured on Apple M5 Max with torch 2.14.1.
 | before fine-tuning |  | 0.995 | 0.000 |  |
 | with the poisoned reviews | 1030 | 1.000 | 0.980 | 28 |
 | without them | 1000 | 1.000 | 0.000 | 27 |
+
+## Who planted it
+
+Each method scores the 1,030 training reviews for 32 triggered reviews that the model
+called positive. 30 of the training reviews are poisoned. Recall is the share of them among the
+30 highest-scored reviews, for the scores averaged over the queries and for each query on
+its own; average precision is of the averaged ranking.
+
+| method | options | recall | average precision | recall per query | fit (s) | score (s) |
+|---|---|---|---|---|---|---|
+| gradient dot product | none | 1.00 | 1.00 | 1.00 | 0.0 | 10.0 |
+| TracIn over checkpoints | none | 1.00 | 1.00 | 1.00 | 0.0 | 37.9 |
+| EK-FAC | damping_over_mean_eigenvalue 0.01 | 1.00 | 1.00 | 0.81 | 28.0 | 9.4 |
+| EK-FAC | damping_over_mean_eigenvalue 0.1 | 1.00 | 1.00 | 0.84 | 28.0 | 9.4 |
+| EK-FAC | damping_over_mean_eigenvalue 1 | 1.00 | 1.00 | 0.89 | 28.0 | 9.4 |
+| K-FAC | damping_over_mean_eigenvalue 0.01 | 1.00 | 1.00 | 0.80 | 16.0 | 8.9 |
+| K-FAC | damping_over_mean_eigenvalue 0.1 | 1.00 | 1.00 | 0.86 | 16.0 | 9.4 |
+| K-FAC | damping_over_mean_eigenvalue 1 | 1.00 | 1.00 | 0.93 | 16.0 | 9.5 |
+| TRAK, checkpoints | projection_size 2048, damping 0.001 | 1.00 | 1.00 | 0.93 | 84.4 | 1.5 |
+| TRAK, final model | projection_size 2048, damping 0.001 | 0.97 | 0.99 | 0.73 | 21.1 | 0.6 |
+| similarity of hidden states | none | 0.57 | 0.63 | 0.35 | 2.8 | 0.1 |
+| random | none | 0.07 | 0.03 | 0.03 | 0.0 | 0.0 |

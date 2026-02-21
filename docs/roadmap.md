@@ -63,6 +63,8 @@ Items move to "Done" as they land.
 - A pretrained language model as a task (`culprit.llm`), and a backdoor
   planted in Qwen2.5-0.5B by fine-tuning its adapters on poisoned reviews:
   `docs/results/poisoning.md`.
+- Every method asked which training reviews caused the backdoored answers,
+  with EK-FAC and TRAK running on the adapters of the real model.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.
@@ -75,7 +77,6 @@ scale, are complete.
 
 ## Stage 4: a real model
 
-- Each method asked to find the poisoned reviews, against two baselines.
 - A counterfactual check: remove the top-ranked reviews, fine-tune again, and
   see whether the backdoor is gone.
 - An account of where the methods fail.
