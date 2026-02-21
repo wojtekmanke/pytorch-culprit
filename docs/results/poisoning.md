@@ -36,3 +36,20 @@ its own; average precision is of the averaged ranking.
 | TRAK, final model | projection_size 2048, damping 0.001 | 0.97 | 0.99 | 0.73 | 21.1 | 0.6 |
 | similarity of hidden states | none | 0.57 | 0.63 | 0.35 | 2.8 | 0.1 |
 | random | none | 0.07 | 0.03 | 0.03 | 0.0 | 0.0 |
+
+## Does removing them remove the backdoor
+
+The adapters are fine-tuned again from the same initial values, without the reviews a method
+blamed most, and the backdoor is tested again.
+
+| removed before fine-tuning | reviews removed | poisoned among them | attack success | clean accuracy |
+|---|---|---|---|---|
+| nothing | 0 | 0 | 0.980 | 1.000 |
+| the poisoned reviews themselves | 30 | 30 | 0.000 | 1.000 |
+| as many reviews at random | 30 | 1 | 0.960 | 1.000 |
+| gradient dot product | 30 | 30 | 0.000 | 1.000 |
+| TracIn over checkpoints | 30 | 30 | 0.000 | 1.000 |
+| EK-FAC, {"damping_over_mean_eigenvalue": 0.01} | 30 | 30 | 0.000 | 1.000 |
+| TRAK, final model, {"projection_size": 2048, "damping": 0.001} | 30 | 29 | 0.000 | 1.000 |
+| TRAK, checkpoints, {"projection_size": 2048, "damping": 0.001} | 30 | 30 | 0.000 | 1.000 |
+| similarity of hidden states | 30 | 17 | 0.290 | 0.995 |

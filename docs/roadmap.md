@@ -65,6 +65,8 @@ Items move to "Done" as they land.
   `docs/results/poisoning.md`.
 - Every method asked which training reviews caused the backdoored answers,
   with EK-FAC and TRAK running on the adapters of the real model.
+- The counterfactual check: fine-tuning again without the reviews a method
+  blamed, and testing the backdoor.
 
 Stages 1 and 2, exact references on tiny models and approximations that
 scale, are complete.
@@ -77,6 +79,4 @@ scale, are complete.
 
 ## Stage 4: a real model
 
-- A counterfactual check: remove the top-ranked reviews, fine-tune again, and
-  see whether the backdoor is gone.
 - An account of where the methods fail.
