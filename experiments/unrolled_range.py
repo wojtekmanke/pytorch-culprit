@@ -21,17 +21,17 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from benchmarks.common import machine
 from torch.func import vmap
 
-from culprit.attribution import ExactInfluence, TracIn, Unrolled
+from benchmarks.common import machine
+from culprit.attribution import EKFACInfluence, ExactInfluence, TracIn, Unrolled
 from culprit.attribution.unrolled import weighted_runs
 from culprit.evaluate import bootstrap, spearman
 from culprit.problems import PROBLEMS
 from experiments.compare import on_device
 
 RESULTS = Path(__file__).resolve().parent.parent / "results" / "unrolled_range"
-REMOVED = (5, 50, 500, 2500)
+SHARES = (0.001, 0.01, 0.1, 0.5)
 
 
 def main() -> None:
@@ -39,6 +39,8 @@ def main() -> None:
     parser.add_argument("problem", choices=sorted(PROBLEMS))
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--runs", type=int, default=128)
+    parser.add_argument("--damping", type=float, default=0.01)
+    parser.add_argument("--batch", type=int, default=250)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
@@ -49,19 +51,23 @@ def main() -> None:
     unrolled = Unrolled(task, problem.config, initial).fit(x, y)
     full = unrolled.params
     methods = {"unrolled": unrolled.score(*queries)}
-    # Two methods that know only the final parameters, for comparison.
-    methods["exact influence"] = (
-        ExactInfluence(task, full, damping=0.01, batch_size=250).fit(x, y).score(*queries)
-    )
+    # Two methods that know only the final parameters, for comparison. The
+    # exact inverse where the model is small enough for it, EK-FAC where not.
     with torch.no_grad():
         for name, value in dict(task.model.named_parameters()).items():
             value.copy_(full[name])
-    methods["gradient dot product"] = TracIn(task, batch_size=1000).fit(x, y).score(*queries)
+    if sum(value.numel() for value in full.values()) <= 20_000:
+        influence = ExactInfluence(task, full, damping=args.damping, batch_size=args.batch)
+        methods["exact influence"] = influence.fit(x, y).score(*queries)
+    else:
+        approximate = EKFACInfluence(task, full, damping=args.damping, batch_size=args.batch)
+        methods["EK-FAC"] = approximate.fit(x, y).score(*queries)
+    methods["gradient dot product"] = TracIn(task, batch_size=args.batch).fit(x, y).score(*queries)
     before = task.measures(full, *queries).cpu().double()
 
     generator = torch.Generator().manual_seed(args.seed)
     records: list[dict[str, Any]] = []
-    for removed in REMOVED:
+    for removed in sorted({max(1, round(share * len(x))) for share in SHARES}):
         weights = torch.ones(args.runs, len(x))
         for row in weights:
             row[torch.randperm(len(x), generator=generator)[:removed]] = 0.0

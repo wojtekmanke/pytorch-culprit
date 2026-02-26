@@ -64,6 +64,7 @@ class PlantedFacts:
     vocab: tuple[str, ...]
     documents: Tensor  # [n_documents, document_length], padded with PAD
     document_fact: Tensor  # [n_documents], the fact each document states or -1
+    document_template: Tensor  # [n_documents], the template it states it in or -1
     facts: Tensor  # [n_facts, 3] token ids of subject, relation, object
     queries: Tensor  # [n_facts, 6]: BOS, the first template's statement
 
@@ -84,10 +85,18 @@ class PlantedFacts:
         targets[:, -1] = self.queries[:, -1]
         return inputs, targets
 
-    def source_mask(self) -> Tensor:
-        """`[n_facts, n_documents]`, true where the document states the fact."""
+    def source_mask(self, same_template: bool | None = None) -> Tensor:
+        """`[n_facts, n_documents]`, true where the document states the fact.
+
+        A query asks in the first template. `same_template=True` keeps only
+        the sources that state the fact in that template, and `False` only
+        those that state it in another.
+        """
         fact_ids = torch.arange(self.facts.shape[0]).unsqueeze(1)
-        return self.document_fact.unsqueeze(0) == fact_ids
+        mask = self.document_fact.unsqueeze(0) == fact_ids
+        if same_template is None:
+            return mask
+        return mask & ((self.document_template == 0) == same_template).unsqueeze(0)
 
     def sources(self, fact: int) -> Tensor:
         return torch.nonzero(self.document_fact == fact).squeeze(1)
@@ -142,6 +151,7 @@ def planted_facts(config: PlantedFactsConfig | None = None) -> PlantedFacts:
 
     rows: list[list[int]] = []
     document_fact: list[int] = []
+    document_template: list[int] = []
     for fact_id in range(config.n_facts):
         copies = config.sources_per_fact[fact_id % len(config.sources_per_fact)]
         for _ in range(copies):
@@ -149,9 +159,11 @@ def planted_facts(config: PlantedFactsConfig | None = None) -> PlantedFacts:
             statement = _statement(template, facts[fact_id], offsets)
             rows.append([BOS, *filler(), *statement, *filler(), EOS])
             document_fact.append(fact_id)
+            document_template.append(template)
     for _ in range(config.n_background):
         rows.append([BOS, *filler(), *filler(), EOS])
         document_fact.append(-1)
+        document_template.append(-1)
 
     # Shuffle so that a document's position says nothing about its fact.
     order = torch.randperm(len(rows), generator=generator)
@@ -165,6 +177,7 @@ def planted_facts(config: PlantedFactsConfig | None = None) -> PlantedFacts:
         vocab=vocab,
         documents=documents,
         document_fact=torch.tensor(document_fact)[order],
+        document_template=torch.tensor(document_template)[order],
         facts=facts,
         queries=queries,
     )

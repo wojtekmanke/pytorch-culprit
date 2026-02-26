@@ -18,9 +18,10 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from benchmarks.common import machine
+from safetensors.torch import load_file, save_file
 from torch import Tensor
 
+from benchmarks.common import machine
 from culprit.attribution import Unrolled, make_attributor
 from culprit.ensemble import train_ensemble
 from culprit.evaluate import (
@@ -28,6 +29,7 @@ from culprit.evaluate import (
     average_precision,
     bootstrap,
     lds,
+    measured_effects,
     source_recall,
     spearman,
 )
@@ -36,7 +38,10 @@ from culprit.retrain import Retraining, RetrainPlan, retrain
 from culprit.train import Checkpoint, TrainRun, train
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
-DAMPINGS = (1e-4, 1e-3, 1e-2, 1e-1)
+ARTIFACTS = Path(__file__).resolve().parent.parent / "artifacts" / "compare"
+# Wide enough that no method's best damping sits at an end of the grid on any
+# of the problems; a narrower grid had EK-FAC choosing its smallest value.
+DAMPINGS = (1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0)
 
 Spec = tuple[str, str, str, list[dict[str, Any]]]  # label, method, checkpoints, option grid
 
@@ -83,7 +88,10 @@ def specs(batch: int, parameters: int) -> list[Spec]:
                 f"TRAK, {label}",
                 "trak",
                 which,
-                [{**d, **big, "projection_size": 2048} for d in damped],
+                # Two projection sizes: TRAK's kernel is only well conditioned
+                # when there are more training examples than dimensions, and
+                # one of the problems has 800 examples.
+                [{**d, **big, "projection_size": size} for size in (256, 2048) for d in damped],
             )
             for label, which in (
                 ("final model", "final"),
@@ -158,22 +166,36 @@ def unrolled_scores(
 
     The first seed should be the one of the model being explained. Each run
     is repeated from its initialisation and differentiated through; returns
-    the mean scores and the seconds spent training and differentiating.
+    the mean scores and the seconds spent training and differentiating. A
+    run's scores are deterministic and slow to get, so they are kept under
+    `artifacts/` with the time they took and read back when asked for again.
     """
     task = problem.task
     total: Tensor | None = None
     fit_seconds = score_seconds = 0.0
     kept = {name: value.clone() for name, value in task.params().items()}
     for seed in seeds:
-        task.model.reset_parameters(seed)  # type: ignore[operator]
-        initial = {name: value.clone() for name, value in task.params().items()}
-        attributor = Unrolled(task, replace(problem.config, seed=seed), initial, segment=segment)
-        started = time.perf_counter()
-        attributor.fit(*problem.train)
-        fitted = time.perf_counter()
-        scores = attributor.score(*problem.queries)
-        fit_seconds += fitted - started
-        score_seconds += time.perf_counter() - fitted
+        cache = ARTIFACTS / problem.name / f"unrolled-seed-{seed}.safetensors"
+        if cache.exists():
+            stored = load_file(cache)
+            scores, timing = stored["scores"], stored["seconds"]
+            fit_seconds += float(timing[0])
+            score_seconds += float(timing[1])
+        else:
+            task.model.reset_parameters(seed)  # type: ignore[operator]
+            initial = {name: value.clone() for name, value in task.params().items()}
+            config = replace(problem.config, seed=seed)
+            attributor = Unrolled(task, config, initial, segment=segment)
+            started = time.perf_counter()
+            attributor.fit(*problem.train)
+            fitted = time.perf_counter()
+            scores = attributor.score(*problem.queries)
+            finished = time.perf_counter()
+            fit_seconds += fitted - started
+            score_seconds += finished - fitted
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            timing = torch.tensor([fitted - started, finished - fitted], dtype=torch.float64)
+            save_file({"scores": scores.contiguous(), "seconds": timing}, cache)
         total = scores if total is None else total + scores
     with torch.no_grad():
         for name, value in dict(task.model.named_parameters()).items():
@@ -181,6 +203,32 @@ def unrolled_scores(
                 value.copy_(kept[name])
     assert total is not None
     return total / len(seeds), fit_seconds, score_seconds
+
+
+def source_statistics(problem: Problem, masks: Tensor, target: Tensor) -> dict[str, Any]:
+    """What retraining itself says about the examples known to be responsible.
+
+    For each kind of source, the mean measured effect of a source on its own
+    query, next to that of every other training example; and how many of the
+    sources the measured effects themselves would recall, which is the most
+    a method can be asked for.
+    """
+    if problem.sources is None:
+        return {}
+    effects = measured_effects(masks, target)
+    sources = problem.sources.cpu()
+    groups = {"sources": sources, **{k: v.cpu() for k, v in (problem.source_groups or {}).items()}}
+    statistics: dict[str, Any] = {
+        "effect_of_other_examples": float(effects[~sources].mean()),
+        "source_groups": {},
+    }
+    for name, mask in groups.items():
+        statistics["source_groups"][name] = {
+            "pairs": int(mask.sum()),
+            "mean_effect": float(effects[mask].mean()),
+            "recall_by_measured_effects": float(source_recall(effects, mask).nanmean()),
+        }
+    return statistics
 
 
 def main() -> None:
@@ -258,6 +306,7 @@ def main() -> None:
             "independent_models": args.independent,
             "independent_seconds": independent_seconds,
             "repeats": args.repeats,
+            **source_statistics(problem, masks, target),
             "agreement_single": str(bootstrap(single[test])),
             "agreement_halves": str(bootstrap(halves[test])),
         }
@@ -285,9 +334,13 @@ def main() -> None:
         }
         if problem.sources is not None:
             # Where the responsible examples are known, also ask for them directly.
-            sources = problem.sources[test]
+            sources = problem.sources.cpu()[test]
             record["recall"] = float(source_recall(scores[test], sources).nanmean())
             record["average_precision"] = float(average_precision(scores[test], sources).nanmean())
+            record["recall_by_group"] = {
+                name: float(source_recall(scores[test], mask.cpu()[test]).nanmean())
+                for name, mask in (problem.source_groups or {}).items()
+            }
         print(
             f"{label:36s} {json.dumps(shown):48s} "
             f"validation {record['lds_validation']:+.3f}  test {interval}  "
@@ -297,8 +350,9 @@ def main() -> None:
         return record
 
     parameters = sum(value.numel() for value in task.params().values())
+    kept: dict[str, Tensor] = {}
     for label, method, which, grid in specs(args.batch, parameters):
-        runs = []
+        runs, run_scores = [], []
         for options in grid:
             attributor = make_attributor(method, task, parameter_sets[which], **options)
             started = time.perf_counter()
@@ -307,7 +361,10 @@ def main() -> None:
             scores: Tensor = attributor.score(*problem.queries)
             finished = time.perf_counter()
             runs.append(graded(label, method, options, scores, fitted - started, finished - fitted))
-        max(runs, key=lambda record: record["lds_validation"])["selected"] = True
+            run_scores.append(scores)
+        best = max(range(len(runs)), key=lambda index: runs[index]["lds_validation"])
+        runs[best]["selected"] = True
+        kept[label] = run_scores[best].float()
         records.extend(runs)
 
     # Unrolling explains a training run, not a set of parameters, so it is
@@ -318,7 +375,16 @@ def main() -> None:
         label = "unrolled, the run itself" if count == 1 else f"unrolled, {count} runs averaged"
         record = graded(label, "unrolled", {}, scores, fit, score)
         record["selected"] = True
+        kept[label] = scores.float()
         records.append(record)
+
+    # The chosen scores of every method, for looking at where they go wrong.
+    directory = ARTIFACTS / args.problem
+    directory.mkdir(parents=True, exist_ok=True)
+    save_file(
+        {label: value.contiguous() for label, value in kept.items()},
+        directory / "chosen.safetensors",
+    )
 
     path = RESULTS / "compare" / f"{args.problem}.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)

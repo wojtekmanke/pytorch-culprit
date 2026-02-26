@@ -27,6 +27,9 @@ class Problem:
     # Where it is known by construction: `[queries, examples]`, true for the
     # training examples that are responsible for each query.
     sources: Tensor | None = None
+    # Named parts of `sources`, where it matters which kind of source a
+    # training example is.
+    source_groups: dict[str, Tensor] | None = None
 
 
 def blobs(seed: int = 0) -> Problem:
@@ -108,15 +111,19 @@ def facts(seed: int = 0) -> Problem:
         train=corpus.train_batch(),
         queries=corpus.query_batch(),
         config=TrainConfig(
-            epochs=60,
+            epochs=100,
             batch_size=32,
             lr=3e-3,
             weight_decay=1e-2,
             warmup_steps=50,
-            checkpoint_every=300,
+            checkpoint_every=500,
             seed=seed,
         ),
         sources=corpus.source_mask(),
+        source_groups={
+            "sources in the query's template": corpus.source_mask(same_template=True),
+            "sources in another template": corpus.source_mask(same_template=False),
+        },
     )
 
 

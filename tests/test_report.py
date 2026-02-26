@@ -176,10 +176,13 @@ def test_comparison_report_lists_the_chosen_run_of_each_method_best_first(tmp_pa
     (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
     text = path.read_text()
     assert path.name == "comparison.md" and "## toy" in text
-    strong = "| strong | damping 0.01 | 0.400 | 0.350 to 0.450 | 1.2 | 0.5 |"
+    strong = "| strong | damping 0.01 † | 0.400 | 0.350 to 0.450 | 1.2 | 0.5 |"
     weak = "| weak | damping 0.1 | 0.100 | 0.050 to 0.150 | 1.2 | 0.5 |"
     assert strong in text and weak in text and text.index(strong) < text.index(weak)
     assert "damping 0.1 | 0.200" not in text  # the run that was not chosen
+    # "strong" chose the smallest damping it tried; "weak" tried only one.
+    assert "| weak | damping 0.1 |" in text
+    assert "smallest or the largest that was tried" in text
     assert "3 runs in all" in text
     assert "0.300 [0.200, 0.400]" in text and "0.600 [0.500, 0.700]" in text
     # Spearman-Brown: sqrt(2 * 0.6 / 1.6) = 0.866.
@@ -402,3 +405,122 @@ def test_poisoning_report_has_a_section_per_stage(tmp_path):
     strong = "| strong | none | 0.90 | 0.95 | 0.50 | 1.0 | 2.0 |"
     assert strong in text and text.index(strong) < text.index("| weak |")
     assert "| nothing | 0 | 0 | 0.900 | 0.990 |" in text
+
+
+def test_failure_report_groups_queries_and_describes_intruders(tmp_path):
+    def group(problem, method, name, lds):
+        return {
+            "problem": problem,
+            "method": method,
+            "group": name,
+            "queries": 30,
+            "mean_spread": 0.5,
+            "lds": lds,
+        }
+
+    root = tmp_path / "results" / "failures"
+    write_jsonl(
+        root / "digits.jsonl",
+        [
+            group("digits", "a", "least affected third", 0.1),
+            group("digits", "b", "least affected third", 0.2),
+            group("digits", "a", "most affected third", 0.6),
+            group("digits", "b", "most affected third", 0.7),
+        ],
+    )
+    write_jsonl(
+        root / "facts.jsonl",
+        [group("facts", "a", "middle third", 0.3), group("facts", "a", "1 source", 0.4)],
+    )
+    write_jsonl(
+        root / "poison.jsonl",
+        [
+            {
+                "method": "m",
+                "queries": 4,
+                "slots": 120,
+                "intruders": 20,
+                "labelled positive": 15,
+                "same product": 5,
+                "shares a phrase": 10,
+                "mentions blue or channel": 2,
+                "base_rate_labelled_positive": 0.5,
+                "base_rate_blue_or_channel": 0.1,
+            }
+        ],
+    )
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert path.name == "failures.md"
+    assert "| group | queries | spread | a | b |" in text
+    assert "| most affected third | 30 | 0.500 | 0.60 | 0.70 |" in text
+    assert "| 1 source | 30 | 0.500 | 0.40 |" in text
+    assert "| m | 20 of 120 | 75% | 25% | 50% | 10% |" in text
+    assert "50% of clean reviews are labelled positive" in text
+
+
+def test_methods_report_has_a_row_per_method(tmp_path):
+    context = {"torch": "9.9", "machine": "test machine", "examples": 5000, "queries": 200}
+    records = [
+        {
+            **context,
+            "method": "m",
+            "device": "cpu",
+            "fit_seconds": 1.5,
+            "score_seconds": 0.25,
+            "peak_bytes": 3 * 2**20,
+        },
+        {**context, "method": "m", "device": "mps", "fit_seconds": 0.5, "score_seconds": 0.125},
+    ]
+    write_jsonl(tmp_path / "results" / "benchmarks" / "methods.jsonl", records)
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    text = path.read_text()
+    assert (
+        "| method | fit on cpu (s) | fit on mps (s) | score on cpu (s) | score on mps (s) |" in text
+    )
+    assert "| m | 1.50 | 0.50 | 0.25 | 0.12 | 3 |" in text
+
+
+def test_growth_of_the_adjoint_is_reported_at_fractions_of_training(tmp_path):
+    def record(before, ratio):
+        return {
+            "problem": "toy",
+            "optimizer": "sgd",
+            "steps": 100,
+            "steps_before_the_end": before,
+            "norm_ratio": ratio,
+            "largest_score": 2.5,
+        }
+
+    growth = [
+        record(0, 1.0),
+        record(10, 1.5),
+        record(25, 2.0),
+        record(50, 4.0),
+        record(75, 8.0),
+        record(90, 16.0),
+        record(100, 32.0),
+    ]
+    (tmp_path / "results").mkdir()
+    write_jsonl(tmp_path / "results" / "unrolled_growth.jsonl", growth)
+    context = {
+        "kind": "context",
+        "problem": "toy",
+        "device": "cpu",
+        "machine": "m",
+        "torch": "9.9",
+        "examples": 1000,
+        "queries_validation": 5,
+        "queries_test": 5,
+        "parameters": 7,
+        "models": 3,
+        "fraction": 0.5,
+        "query_accuracy": 1.0,
+        "retrain_seconds": 1.0,
+        "repeats": 2,
+        "agreement_single": "0.500 [0.400, 0.600]",
+        "agreement_halves": "0.500 [0.400, 0.600]",
+    }
+    write_jsonl(tmp_path / "results" / "compare" / "toy.jsonl", [context])
+    (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
+    assert "| toy | sgd | 100 | 1.5 | 2 | 4 | 8 | 16 | 32 | 2.5 |" in path.read_text()

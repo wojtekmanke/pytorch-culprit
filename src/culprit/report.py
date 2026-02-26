@@ -367,6 +367,40 @@ def poison_sections(results: Path) -> list[str]:
     return sections
 
 
+def methods_section(records: list[Record]) -> str:
+    """One row per method: fit and score time on each device, peak memory on the CPU."""
+    devices = list(dict.fromkeys(record["device"] for record in records))
+    cells: dict[str, dict[str, Record]] = defaultdict(dict)
+    for record in records:
+        cells[record["method"]][record["device"]] = record
+    rows = []
+    for method, by_device in cells.items():
+        rows.append(
+            [
+                method,
+                *(f"{by_device[device]['fit_seconds']:.2f}" for device in devices),
+                *(f"{by_device[device]['score_seconds']:.2f}" for device in devices),
+                f"{by_device['cpu']['peak_bytes'] / 2**20:,.0f}",
+            ]
+        )
+    context = records[0]
+    header = [
+        "method",
+        *(f"fit on {device} (s)" for device in devices),
+        *(f"score on {device} (s)" for device in devices),
+        "peak on cpu (MiB)",
+    ]
+    return (
+        "## What each method costs\n\n"
+        f"Fitting {context['examples']:,} training digits and scoring {context['queries']} "
+        "queries on the 7,690-parameter\nclassifier, single precision, with fixed options. "
+        "Peak memory is from one run under\n`torch.profiler` on the CPU and counts tensors "
+        "only.\n"
+        f"Measured on {context['machine']} with torch {context['torch']}.\n\n"
+        + markdown_table(header, rows)
+    )
+
+
 def _options_text(options: dict[str, Any]) -> str:
     return ", ".join(f"{name} {value:g}" for name, value in options.items()) or "none"
 
@@ -382,17 +416,32 @@ def _ceiling(agreement_halves: str) -> float:
     return float((2 * r / (1 + r)) ** 0.5)
 
 
+def _at_an_end(record: Record, records: list[Record]) -> bool:
+    """Whether the damping chosen for a method is the smallest or largest that was tried."""
+    tried = sorted(
+        {
+            other["options"]["damping"]
+            for other in records
+            if other["kind"] == "run"
+            and other["label"] == record["label"]
+            and "damping" in other["options"]
+        }
+    )
+    return len(tried) > 1 and record["options"].get("damping") in (tried[0], tried[-1])
+
+
 def comparison_section(records: list[Record]) -> str:
     """One problem: what it was, and the chosen run of every method, best first."""
     context = next(record for record in records if record["kind"] == "context")
     chosen = [record for record in records if record["kind"] == "run" and record["selected"]]
     chosen.sort(key=lambda record: record["lds_test"], reverse=True)
+    edge = {record["label"] for record in chosen if _at_an_end(record, records)}
     with_sources = bool(chosen) and all("recall" in record for record in chosen)
     groups = list(chosen[0].get("recall_by_group", {})) if with_sources else []
     rows = [
         [
             record["label"],
-            _options_text(record["options"]),
+            _options_text(record["options"]) + (" †" if record["label"] in edge else ""),
             f"{record['lds_test']:.3f}",
             f"{record['lds_low']:.3f} to {record['lds_high']:.3f}",
             *([f"{record['recall']:.2f}"] if with_sources else []),
@@ -418,6 +467,12 @@ def comparison_section(records: list[Record]) -> str:
             "\n\nThe recall columns do not need retraining: a query with k known sources gets "
             "k guesses,\nits k highest-scored training examples, and the entry is the share of "
             "them that are sources."
+        )
+    edge_note = ""
+    if edge:
+        edge_note = (
+            "\n\n† The damping chosen is the smallest or the largest that was tried, so a "
+            "wider grid might\nhave done better for that method."
         )
     sources_note = ""
     if "source_groups" in context:
@@ -469,7 +524,9 @@ def comparison_section(records: list[Record]) -> str:
         f"were chosen on\n{context['queries_validation']} queries and the scores below are "
         f"from the other {context['queries_test']}. The interval is a bootstrap\nover those "
         f"queries. Times are single runs on {context['machine']} ({context['device']}), "
-        f"torch {context['torch']}.{recall_note}\n\n" + markdown_table(header, rows) + sources_note
+        f"torch {context['torch']}.{recall_note}{edge_note}\n\n"
+        + markdown_table(header, rows)
+        + sources_note
     )
 
 
@@ -497,6 +554,134 @@ def unrolled_range_section(records: list[Record]) -> str:
     )
 
 
+def _grouped_table(records: list[Record], first_column: str) -> str:
+    """Groups down the side, methods across, the score of each in the cells."""
+    methods = list(dict.fromkeys(record["method"] for record in records))
+    cells: dict[str, dict[str, Record]] = defaultdict(dict)
+    for record in records:
+        cells[record["group"]][record["method"]] = record
+    rows = []
+    for group, by_method in cells.items():
+        first = by_method[methods[0]]
+        rows.append(
+            [
+                group,
+                str(first["queries"]),
+                f"{first['mean_spread']:.3f}",
+                *(f"{by_method[method]['lds']:.2f}" for method in methods),
+            ]
+        )
+    return markdown_table([first_column, "queries", "spread", *methods], rows)
+
+
+def failure_sections(results: Path) -> list[str]:
+    """Where the methods do worst: by query, by kind of fact, and by what they blame."""
+    sections = []
+    spread_note = (
+        "The spread of a query is the standard deviation, across the retrained subsets, of\n"
+        "its averaged measurement: how much the choice of training examples matters to it.\n"
+        "The cells are linear datamodeling scores.\n\n"
+    )
+    for name in ("digits", "facts"):
+        records = read_records(results / f"{name}.jsonl")
+        thirds = [record for record in records if record["group"].endswith("third")]
+        for problem in dict.fromkeys(record["problem"] for record in thirds):
+            mine = [record for record in thirds if record["problem"] == problem]
+            sections.append(
+                f"## {problem}: queries that retraining moves more are attributed better\n\n"
+                + spread_note
+                + _grouped_table(mine, "group")
+            )
+        others = [record for record in records if not record["group"].endswith("third")]
+        if others:
+            sections.append(
+                "## facts: by how the fact was stated\n\n"
+                "The same scores, with the queries grouped by how many training documents\n"
+                "state the fact and by whether any of them states it the way the query asks.\n\n"
+                + _grouped_table(others, "facts with")
+            )
+    poison = read_records(results / "poison.jsonl")
+    if poison:
+        rows = []
+        for record in poison:
+            intruders = record["intruders"]
+
+            def share(key: str, record: Record = record, intruders: int = intruders) -> str:
+                return f"{record[key] / intruders:.0%}" if intruders else ""
+
+            rows.append(
+                [
+                    record["method"],
+                    f"{intruders} of {record['slots']}",
+                    share("labelled positive"),
+                    share("same product"),
+                    share("shares a phrase"),
+                    share("mentions blue or channel"),
+                ]
+            )
+        first = poison[0]
+        sections.append(
+            "## poisoning: what gets ranked above a poisoned review\n\n"
+            "An intruder is a clean training review among the 30 highest-scored for one\n"
+            "triggered query. The columns say what the intruders have in common with the\n"
+            "query they intrude on. For scale, "
+            f"{first['base_rate_labelled_positive']:.0%} of clean reviews are labelled positive\n"
+            f"and {first['base_rate_blue_or_channel']:.0%} mention a word of the trigger.\n\n"
+            + markdown_table(
+                [
+                    "method",
+                    "intruders",
+                    "labelled positive",
+                    "same product as the query",
+                    "share a phrase with it",
+                    "mention blue or channel",
+                ],
+                rows,
+            )
+        )
+    return sections
+
+
+def unrolled_growth_section(records: list[Record]) -> str:
+    """One row per problem: how large the adjoint has become at points going back in training."""
+    fractions = (0.1, 0.25, 0.5, 0.75, 0.9)
+    rows = []
+    for problem in dict.fromkeys(record["problem"] for record in records):
+        mine = [record for record in records if record["problem"] == problem]
+        whole = max(mine, key=lambda record: record["steps_before_the_end"])
+
+        def nearest(fraction: float, mine: list[Record] = mine, whole: Record = whole) -> Record:
+            wanted = fraction * whole["steps"]
+            return min(mine, key=lambda point: abs(point["steps_before_the_end"] - wanted))
+
+        rows.append(
+            [
+                problem,
+                whole["optimizer"],
+                f"{whole['steps']:,}",
+                *(f"{nearest(fraction)['norm_ratio']:.3g}" for fraction in fractions),
+                f"{whole['norm_ratio']:.3g}",
+                f"{whole['largest_score']:.3g}",
+            ]
+        )
+    header = [
+        "problem",
+        "optimizer",
+        "steps",
+        *(f"{fraction:.0%} of training back" for fraction in fractions),
+        "at the first step",
+        "largest score",
+    ]
+    return (
+        "## How far back the end of training can be traced\n\n"
+        "The norm of the adjoint that unrolled differentiation pulls back through\n"
+        "training, at points going back from the end, as a multiple of its norm at the\n"
+        "end. It is the sensitivity of the final measurement to a nudge of the parameters\n"
+        "at that point. The last column is the largest score that came out.\n\n"
+        + markdown_table(header, rows)
+    )
+
+
 def write_reports(results: Path, docs: Path) -> list[Path]:
     """Write every report whose records exist and return the files written."""
     written = []
@@ -507,6 +692,9 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
     precision = read_records(results / "benchmarks" / "precision.jsonl")
     if precision:
         sections.append(precision_section(precision))
+    methods = read_records(results / "benchmarks" / "methods.jsonl")
+    if methods:
+        sections.append(methods_section(methods))
     profiled = read_records(results / "benchmarks" / "profile.jsonl")
     if profiled:
         sections.append(profile_section(profiled))
@@ -526,6 +714,13 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
         path = docs / "results" / "benchmarks.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(_GENERATED + "# Benchmarks\n\n" + "\n".join(sections))
+        written.append(path)
+
+    failures = failure_sections(results / "failures")
+    if failures:
+        path = docs / "results" / "failures.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_GENERATED + "# Where the methods do worst\n\n" + "\n".join(failures))
         written.append(path)
 
     poison = poison_sections(results / "poison")
@@ -552,6 +747,9 @@ def write_reports(results: Path, docs: Path) -> list[Path]:
             unrolled_range_section(read_records(path))
             for path in sorted((results / "unrolled_range").glob("*.jsonl"))
         ]
+        growth = read_records(results / "unrolled_growth.jsonl")
+        if growth:
+            comparisons.append(unrolled_growth_section(growth))
         if ranges:
             context = read_records(sorted((results / "unrolled_range").glob("*.jsonl"))[0])[0]
             comparisons.append(

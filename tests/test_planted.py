@@ -68,6 +68,25 @@ def test_a_query_asks_only_for_the_object():
     assert corpus.decode(corpus.queries[0]).startswith("<bos> q0 s0 r0 a0 o")
 
 
+def test_sources_are_split_by_whether_they_use_the_querys_template():
+    corpus = planted_facts(CONFIG)
+    same, other = corpus.source_mask(same_template=True), corpus.source_mask(same_template=False)
+    assert torch.equal(same | other, corpus.source_mask())
+    assert not bool((same & other).any())
+
+    def contains_the_query(fact, document):
+        query = corpus.queries[fact, 1:].tolist()
+        tokens = corpus.documents[document].tolist()
+        return any(tokens[i : i + 5] == query for i in range(len(tokens) - 4))
+
+    # A source in the query's template contains the query's own tokens, in order.
+    assert all(contains_the_query(fact, document) for fact, document in same.nonzero().tolist())
+    assert not any(
+        contains_the_query(fact, document) for fact, document in other.nonzero().tolist()
+    )
+    assert bool((corpus.document_template[corpus.document_fact == -1] == -1).all())
+
+
 def test_documents_do_not_reveal_their_fact_by_position():
     corpus = planted_facts(CONFIG)
     assert not torch.equal(corpus.document_fact, corpus.document_fact.sort().values)

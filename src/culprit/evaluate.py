@@ -130,3 +130,19 @@ def accuracy(outputs: Tensor, targets: Tensor) -> float:
     counted = targets != IGNORE
     correct = (outputs.argmax(-1) == targets) & counted
     return float(correct.sum() / counted.sum())
+
+
+def measured_effects(masks: Tensor, measurements: Tensor) -> Tensor:
+    """What including each example did to each query, read off retraining directly.
+
+    For every example, the mean measurement of the models that trained on it
+    minus the mean of those that did not: `[queries, examples]`. The subsets
+    are random, so everything else averages out as the number of models
+    grows. This needs no attribution method, which is what makes it useful
+    for checking one, and costs as many retrainings as it takes for the
+    difference of two means to be less noisy than the effect.
+    """
+    inside = masks.to(torch.float64)
+    outside = 1.0 - inside
+    measured = measurements.to(torch.float64)
+    return (measured.T @ inside) / inside.sum(0) - (measured.T @ outside) / outside.sum(0)

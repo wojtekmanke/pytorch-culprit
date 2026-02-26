@@ -2,7 +2,15 @@ import pytest
 import torch
 
 from culprit.ensemble import random_subsets
-from culprit.evaluate import accuracy, bootstrap, lds, predictions, ranks, spearman
+from culprit.evaluate import (
+    accuracy,
+    bootstrap,
+    lds,
+    measured_effects,
+    predictions,
+    ranks,
+    spearman,
+)
 from culprit.losses import IGNORE
 
 
@@ -114,3 +122,15 @@ def test_accuracy_counts_only_the_positions_that_have_a_target():
     # Counted: (0,0) right, (0,2) wrong, (1,2) right.
     assert accuracy(outputs, targets) == pytest.approx(2 / 3)
     assert accuracy(torch.tensor([[0.0, 1.0], [1.0, 0.0]]), torch.tensor([1, 1])) == 0.5
+
+
+def test_measured_effects_recover_planted_effects_as_models_are_added():
+    def error(models):
+        effects, masks, measurements = planted(queries=6, examples=30, models=models)
+        return (measured_effects(masks, measurements) - effects).abs().mean().item()
+
+    assert error(4000) < error(400) < error(40)
+    effects, masks, measurements = planted(queries=6, examples=30, models=4000)
+    measured = measured_effects(masks, measurements)
+    assert measured.shape == effects.shape
+    assert torch.corrcoef(torch.stack([measured.flatten(), effects.flatten()]))[0, 1] > 0.95

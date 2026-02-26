@@ -18,7 +18,7 @@ contribution is independent of the subset, that puts the correlation of the true
 subset with the average of all 8 at about 0.88 (Spearman-Brown), which is the most
 any method could score here.
 
-Each method was run over a grid of its options, 48 runs in all. The options were chosen on
+Each method was run over a grid of its options, 102 runs in all. The options were chosen on
 100 queries and the scores below are from the other 100. The interval is a bootstrap
 over those queries. Times are single runs on Apple M5 Max (mps), torch 2.14.1.
 
@@ -26,19 +26,19 @@ over those queries. Times are single runs on Apple M5 Max (mps), torch 2.14.1.
 |---|---|---|---|---|---|
 | TRAK, independent models | damping 0.001, projection_size 2048 | 0.520 | 0.494 to 0.544 | 1.4 | 0.2 |
 | TRAK, checkpoints | damping 0.001, projection_size 2048 | 0.411 | 0.380 to 0.440 | 0.9 | 0.1 |
-| conjugate gradient, 100 iterations | damping 0.01, max_iterations 100 | 0.397 | 0.372 to 0.422 | 0.0 | 5.4 |
-| exact influence | damping 0.01 | 0.397 | 0.372 to 0.422 | 4.7 | 0.1 |
+| conjugate gradient, 100 iterations | damping 0.01, max_iterations 100 | 0.397 | 0.372 to 0.422 | 0.0 | 2.1 |
+| exact influence | damping 0.01 | 0.397 | 0.372 to 0.422 | 3.0 | 0.1 |
 | K-FAC | damping 0.001 | 0.380 | 0.355 to 0.405 | 0.0 | 0.0 |
-| conjugate gradient, 10 iterations | damping 0.01, max_iterations 10 | 0.378 | 0.354 to 0.402 | 0.0 | 1.0 |
-| EK-FAC | damping 0.001 | 0.377 | 0.353 to 0.402 | 0.1 | 0.1 |
-| low rank, 128 eigenpairs | damping 0.1, rank 128 | 0.377 | 0.353 to 0.402 | 2.0 | 0.0 |
+| conjugate gradient, 10 iterations | damping 0.01, max_iterations 10 | 0.378 | 0.354 to 0.402 | 0.0 | 0.4 |
+| EK-FAC | damping 0.001 | 0.377 | 0.353 to 0.402 | 0.0 | 0.0 |
+| low rank, 128 eigenpairs | damping 0.1, rank 128 | 0.377 | 0.353 to 0.402 | 2.4 | 0.0 |
 | TRAK, final model | damping 0.001, projection_size 2048 | 0.318 | 0.291 to 0.345 | 0.2 | 0.0 |
-| LiSSA, 500 steps | damping 0.1, steps 500, sample_size 64 | 0.309 | 0.286 to 0.332 | 0.1 | 1.8 |
+| LiSSA, 500 steps | damping 0.1, steps 500, sample_size 64 | 0.309 | 0.286 to 0.332 | 0.1 | 0.9 |
 | low rank, 16 eigenpairs | damping 0.1, rank 16 | 0.305 | 0.283 to 0.327 | 0.4 | 0.0 |
 | TracIn over checkpoints | none | 0.219 | 0.201 to 0.237 | 0.0 | 0.0 |
 | gradient dot product | none | 0.189 | 0.170 to 0.208 | 0.0 | 0.0 |
-| unrolled, 4 runs averaged | none | 0.105 | 0.090 to 0.120 | 4.9 | 11.8 |
-| unrolled, the run itself | none | 0.096 | 0.082 to 0.109 | 1.2 | 3.0 |
+| unrolled, 4 runs averaged | none | 0.105 | 0.090 to 0.120 | 4.9 | 11.7 |
+| unrolled, the run itself | none | 0.096 | 0.082 to 0.109 | 1.2 | 2.9 |
 
 ## digits
 
@@ -52,27 +52,78 @@ contribution is independent of the subset, that puts the correlation of the true
 subset with the average of all 8 at about 0.89 (Spearman-Brown), which is the most
 any method could score here.
 
-Each method was run over a grid of its options, 48 runs in all. The options were chosen on
+Each method was run over a grid of its options, 102 runs in all. The options were chosen on
 100 queries and the scores below are from the other 100. The interval is a bootstrap
 over those queries. Times are single runs on Apple M5 Max (mps), torch 2.14.1.
 
 | method | options chosen | LDS | 95% interval | fit (s) | score (s) |
 |---|---|---|---|---|---|
-| TRAK, independent models | damping 0.001, projection_size 2048 | 0.496 | 0.468 to 0.523 | 1.7 | 0.2 |
-| TRAK, checkpoints | damping 0.001, projection_size 2048 | 0.453 | 0.420 to 0.485 | 1.1 | 0.1 |
-| low rank, 128 eigenpairs | damping 0.1, rank 128 | 0.394 | 0.367 to 0.421 | 4.6 | 0.1 |
-| conjugate gradient, 10 iterations | damping 0.1, max_iterations 10 | 0.387 | 0.361 to 0.414 | 0.0 | 1.0 |
+| TRAK, independent models | damping 0.001, projection_size 2048 | 0.496 | 0.468 to 0.523 | 1.4 | 0.2 |
+| TRAK, checkpoints | damping 0.001, projection_size 2048 | 0.453 | 0.420 to 0.485 | 0.9 | 0.1 |
+| low rank, 128 eigenpairs | damping 0.1, rank 128 | 0.394 | 0.367 to 0.421 | 1.9 | 0.0 |
+| conjugate gradient, 10 iterations | damping 0.1, max_iterations 10 | 0.387 | 0.361 to 0.414 | 0.0 | 0.4 |
 | K-FAC | damping 0.001 | 0.387 | 0.360 to 0.412 | 0.0 | 0.0 |
 | EK-FAC | damping 0.001 | 0.386 | 0.360 to 0.412 | 0.0 | 0.0 |
-| conjugate gradient, 100 iterations | damping 0.01, max_iterations 100 | 0.385 | 0.357 to 0.414 | 0.0 | 5.2 |
-| exact influence | damping 0.01 | 0.385 | 0.357 to 0.414 | 4.3 | 0.1 |
-| LiSSA, 500 steps | damping 0.1, steps 500, sample_size 64 | 0.335 | 0.310 to 0.361 | 0.1 | 1.7 |
-| low rank, 16 eigenpairs | damping 0.1, rank 16 | 0.332 | 0.307 to 0.357 | 0.5 | 0.0 |
-| TRAK, final model | damping 0.001, projection_size 2048 | 0.328 | 0.298 to 0.357 | 0.8 | 0.1 |
-| TracIn over checkpoints | none | 0.232 | 0.213 to 0.250 | 0.0 | 1.0 |
-| unrolled, 4 runs averaged | none | 0.231 | 0.210 to 0.254 | 16.2 | 31.5 |
-| gradient dot product | none | 0.196 | 0.175 to 0.215 | 0.0 | 0.2 |
-| unrolled, the run itself | none | 0.131 | 0.115 to 0.148 | 5.7 | 10.6 |
+| conjugate gradient, 100 iterations | damping 0.01, max_iterations 100 | 0.385 | 0.357 to 0.414 | 0.0 | 2.2 |
+| exact influence | damping 0.01 | 0.385 | 0.357 to 0.414 | 3.0 | 0.0 |
+| LiSSA, 500 steps | damping 0.1, steps 500, sample_size 64 | 0.335 | 0.310 to 0.361 | 0.1 | 0.9 |
+| low rank, 16 eigenpairs | damping 0.1, rank 16 | 0.332 | 0.307 to 0.357 | 0.3 | 0.0 |
+| TRAK, final model | damping 0.001, projection_size 2048 | 0.328 | 0.298 to 0.357 | 0.2 | 0.0 |
+| TracIn over checkpoints | none | 0.232 | 0.213 to 0.250 | 0.0 | 0.0 |
+| unrolled, 4 runs averaged | none | 0.231 | 0.210 to 0.254 | 7.0 | 18.9 |
+| gradient dot product | none | 0.196 | 0.175 to 0.215 | 0.0 | 0.0 |
+| unrolled, the run itself | none | 0.131 | 0.115 to 0.148 | 1.7 | 4.7 |
+
+## facts
+
+800 training examples, 114,688 parameters, query accuracy 0.656.
+Ground truth: 300 random subsets holding 50% of the examples, with 8 models
+trained on each from different seeds (545s in all), and their measurements averaged.
+Two models trained on the same subset order the subsets alike with a rank correlation of
+0.493 [0.458, 0.534]: most of what one retrained model measures is its seed, not its subset.
+The averages of two halves of the 8 models agree with 0.751 [0.728, 0.774]. If the seed's
+contribution is independent of the subset, that puts the correlation of the true effect of a
+subset with the average of all 8 at about 0.93 (Spearman-Brown), which is the most
+any method could score here.
+
+Each method was run over a grid of its options, 95 runs in all. The options were chosen on
+80 queries and the scores below are from the other 80. The interval is a bootstrap
+over those queries. Times are single runs on Apple M5 Max (mps), torch 2.14.1.
+
+The recall columns do not need retraining: a query with k known sources gets k guesses,
+its k highest-scored training examples, and the entry is the share of them that are sources.
+
+† The damping chosen is the smallest or the largest that was tried, so a wider grid might
+have done better for that method.
+
+| method | options chosen | LDS | 95% interval | sources recalled | recalled of the sources in the query's template | recalled of the sources in another template | fit (s) | score (s) |
+|---|---|---|---|---|---|---|---|---|
+| conjugate gradient, 100 iterations | damping 0.01, max_iterations 100 | 0.470 | 0.423 to 0.522 | 0.72 | 0.60 | 0.46 | 0.0 | 106.6 |
+| EK-FAC | damping 1e-06 † | 0.469 | 0.428 to 0.510 | 0.65 | 0.40 | 0.47 | 0.3 | 0.1 |
+| K-FAC | damping 1e-06 † | 0.456 | 0.415 to 0.495 | 0.64 | 0.39 | 0.47 | 0.1 | 0.0 |
+| LiSSA, 500 steps | damping 1e-06, steps 500, sample_size 64 † | 0.315 | 0.277 to 0.355 | 0.62 | 0.43 | 0.50 | 0.5 | 46.0 |
+| TRAK, checkpoints | damping 0.01, projection_size 2048 | 0.266 | 0.235 to 0.296 | 0.62 | 0.37 | 0.47 | 1.1 | 0.1 |
+| TracIn over checkpoints | none | 0.244 | 0.215 to 0.271 | 0.53 | 0.28 | 0.42 | 0.0 | 0.2 |
+| conjugate gradient, 10 iterations | damping 1, max_iterations 10 † | 0.152 | 0.125 to 0.181 | 0.31 | 0.21 | 0.23 | 0.0 | 11.5 |
+| low rank, 128 eigenpairs | damping 1, rank 128 † | 0.056 | 0.039 to 0.074 | 0.04 | 0.00 | 0.04 | 5.4 | 0.0 |
+| low rank, 16 eigenpairs | damping 1, rank 16 † | 0.042 | 0.026 to 0.058 | 0.02 | 0.00 | 0.02 | 1.0 | 0.1 |
+| TRAK, independent models | damping 1, projection_size 2048 † | 0.041 | 0.029 to 0.053 | 0.03 | 0.04 | 0.01 | 1.7 | 0.2 |
+| gradient dot product | none | 0.036 | 0.021 to 0.051 | 0.01 | 0.00 | 0.01 | 0.0 | 0.1 |
+| TRAK, final model | damping 1, projection_size 2048 † | 0.031 | 0.016 to 0.044 | 0.00 | 0.00 | 0.00 | 0.2 | 0.0 |
+| unrolled, the run itself | none | -0.004 | -0.018 to 0.011 | 0.00 | 0.01 | 0.00 | 13.1 | 199.6 |
+| unrolled, 2 runs averaged | none | -0.004 | -0.018 to 0.011 | 0.00 | 0.01 | 0.00 | 26.1 | 403.9 |
+
+What retraining itself says about the examples known to be responsible. The effect is the mean
+measurement of the models that trained on an example minus that of the models that did not;
+the last column is the recall those measured effects would get, which no method can be
+expected to beat.
+
+| kind of training example | pairs with a query | mean measured effect | recalled by measured effects |
+|---|---|---|---|
+| sources | 600 | +1.867 | 0.76 |
+| sources in the query's template | 210 | +2.655 | 0.63 |
+| sources in another template | 390 | +1.442 | 0.48 |
+| every other training example |  | -0.009 |  |
 
 ## What the derivative of training predicts
 
