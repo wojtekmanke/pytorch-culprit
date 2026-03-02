@@ -183,3 +183,12 @@ def test_scores_predict_matched_retraining_without_a_few_examples():
     predicted = -(1 - weights) @ scores.T
     correlation = torch.corrcoef(torch.stack([actual.flatten(), predicted.flatten()]))[0, 1]
     assert correlation > 0.9
+
+
+def test_the_growth_of_the_adjoint_is_recorded_segment_by_segment():
+    task, (x, y), queries, config, initial = setup("mlp", "plain sgd")
+    attributor = Unrolled(task, config, initial, segment=3).fit(x, y)
+    attributor.score(*queries)
+    steps = [step for step, _ in attributor.adjoint_norms]
+    assert steps == [9, 6, 3, 0]
+    assert all(norm > 0 for _, norm in attributor.adjoint_norms)

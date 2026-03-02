@@ -125,6 +125,19 @@ expected to beat.
 | sources in another template | 390 | +1.442 | 0.48 |
 | every other training example |  | -0.009 |  |
 
+## How far back the end of training can be traced
+
+The norm of the adjoint that unrolled differentiation pulls back through
+training, at points going back from the end, as a multiple of its norm at the
+end. It is the sensitivity of the final measurement to a nudge of the parameters
+at that point. The last column is the largest score that came out.
+
+| problem | optimizer | steps | 10% of training back | 25% of training back | 50% of training back | 75% of training back | 90% of training back | at the first step | largest score |
+|---|---|---|---|---|---|---|---|---|---|
+| digits-sgd | sgd | 1,560 | 0.613 | 0.414 | 0.315 | 0.334 | 0.659 | 6.76 | 1.44 |
+| digits | adamw | 1,560 | 0.65 | 0.473 | 0.391 | 0.459 | 0.768 | 5.89 | 1.54 |
+| facts | adamw | 2,500 | 0.544 | 0.308 | 3.66 | 1.69e+05 | 2.63e+08 | 4.56e+11 | 1.21e+11 |
+
 ## What the derivative of training predicts
 
 Unrolled differentiation is the exact derivative of a measurement in each

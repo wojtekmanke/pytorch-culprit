@@ -182,6 +182,10 @@ class Unrolled(Attributor):
         self.optimizer = optimizer_for(config)
         self._train: tuple[Tensor, Tensor] | None = None
         self.run: FunctionalRun | None = None
+        # After `score`: the step, and the norm of the parameter adjoint
+        # there, averaged over queries. How fast this grows going backwards
+        # is how sensitive the end of training is to its earlier steps.
+        self.adjoint_norms: list[tuple[int, float]] = []
 
     def fit(self, inputs: Tensor, targets: Tensor) -> Self:
         self._train = (inputs, targets)
@@ -235,6 +239,12 @@ class Unrolled(Attributor):
         scores = torch.zeros(len(inputs), len(train_inputs), dtype=first.dtype, device=first.device)
         ones = torch.ones(self.config.batch_size, dtype=first.dtype, device=first.device)
 
+        def norm() -> float:
+            squares = sum(value.flatten(1).square().sum(1) for value in adjoint.values())
+            assert isinstance(squares, Tensor)
+            return float(squares.sqrt().mean())
+
+        self.adjoint_norms = [(total, norm())]
         for start in sorted(self.run.snapshots, reverse=True):
             stop = min(start + self.segment, total)
             states = self._replay(start, stop, ones)
@@ -267,4 +277,5 @@ class Unrolled(Attributor):
                 adjoint, state_adjoint, weight_adjoint = vmap(pullback)((adjoint, state_adjoint))
                 # A batch is cut from a permutation, so its indices are distinct.
                 scores[:, batch] += weight_adjoint
+            self.adjoint_norms.append((start, norm()))
         return cpu_double(scores)

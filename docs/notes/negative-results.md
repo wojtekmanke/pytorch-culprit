@@ -130,3 +130,47 @@ What follows from it:
 - Averaging unrolled scores over four runs raised the score under Adam
   from 0.13 to 0.23 and under SGD only from 0.10 to 0.11. Averaging over
   runs is not a cure.
+
+## On a model that memorised its training set, the ranking of methods turns over
+
+The planted-facts GPT fits its 800 documents until the only loss left is
+the filler, which is random and cannot be fitted. The comparison there
+(`docs/results/comparison.md`) contradicts the one on the digits in three
+places.
+
+**TRAK goes from first to nowhere.** On the digits, TRAK over
+independently trained models scores 0.50, the best of any method. On the
+facts it scores 0.04, and at small damping it is *negatively* correlated
+with retraining, down to -0.12. TRAK over the checkpoints of one run still
+scores 0.27. The gradient dot product goes the same way, from 0.20 to 0.04,
+while TracIn over checkpoints holds at 0.24.
+
+My reading: everything that fails here uses the gradients of the training
+documents at the end of training and nothing else. Once a document is
+fitted those gradients are nearly zero in exactly the tokens that carry
+its fact, and what remains is the gradient of its filler. The checkpoints
+saw the documents before they were fitted. This is an interpretation; the
+table shows the pattern and does not isolate the cause.
+
+**The inverse curvature goes from optional to necessary.** On the digits
+the gradient dot product already scores half of what exact influence does.
+On the facts, EK-FAC and conjugate gradient score 0.47 against the dot
+product's 0.04, and EK-FAC wanted the smallest damping it was offered,
+which the table marks. Dividing by a curvature that is close to singular
+is what recovers a signal from gradients that are close to zero.
+
+**Unrolling stops working at any distance.** Its score on the facts is
+-0.004. On the digits the adjoint that unrolling pulls back through
+training is about six times larger at the first step than at the last. On
+the facts it is 4.6e11 times larger, and the largest score that came out
+was 1.2e11, for a measurement that a source document moves by two or three. Training
+there is so sensitive to its early steps that the derivative, though it is
+still the derivative, is a number about rounding. Averaging two runs
+changes nothing.
+
+What retraining says directly, without any method, is also in that table.
+A document that states a fact in the query's own template raises the
+query's margin by 2.7 on average, one that states it in another template
+by 1.4, and any other document by -0.01. The construction works: the
+sources are the cause, and the effects are large. The best method recalls
+72% of them where the measured effects themselves would recall 76%.
