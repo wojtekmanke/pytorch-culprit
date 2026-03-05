@@ -107,6 +107,35 @@ Measured on Apple M5 Max with torch 2.14.1.
 | per-example gradients, vmap over grad | mps | 5.62 | 2.00 | 2.81x | 2.3 |
 | Hessian-vector product, jvp over grad | mps | 7.34 | 2.71 | 2.71x | 5.1 |
 
+## Half precision on the GPU
+
+Scores of 64 queries computed in float32, under `torch.autocast` in float16, and
+under autocast with the loss and the measurement multiplied by a power of two
+beforehand. Agreement is the rank correlation with the float32 scores of the
+same query, averaged over queries; the float32 row is a second float32 run.
+Measured on Apple M5 Max (mps) with torch 2.14.1.
+
+| problem | method | precision | rank agreement with float32 | finite scores | scores exactly zero | seconds |
+|---|---|---|---|---|---|---|
+| digits | gradient dot product | float32 | 1.000 | 100.0% | 0.0% | 0.01 |
+| digits | gradient dot product | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.01 |
+| digits | gradient dot product | autocast to float16, losses times 4096 | 0.038 | 11.9% | 88.1% | 0.01 |
+| digits | EK-FAC | float32 | 1.000 | 100.0% | 0.0% | 0.13 |
+| digits | EK-FAC | autocast to float16 | 0.996 | 100.0% | 0.0% | 0.13 |
+| digits | EK-FAC | autocast to float16, losses times 4096 | _LinAlgError: linalg.eigh: The algorithm failed to converge because the input matrix is ill-conditioned or has too many repeated eigenvalues (error code: 9). |  |  |  |
+| digits | TRAK | float32 | 1.000 | 100.0% | 0.0% | 0.43 |
+| digits | TRAK | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.44 |
+| digits | TRAK | autocast to float16, losses times 4096 | 1.000 | 100.0% | 0.0% | 0.44 |
+| facts | gradient dot product | float32 | 1.000 | 100.0% | 0.0% | 0.04 |
+| facts | gradient dot product | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.04 |
+| facts | gradient dot product | autocast to float16, losses times 4096 | 0.000 | 0.0% | 100.0% | 0.03 |
+| facts | EK-FAC | float32 | 1.000 | 100.0% | 0.0% | 0.18 |
+| facts | EK-FAC | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.20 |
+| facts | EK-FAC | autocast to float16, losses times 4096 | 0.000 | 0.0% | 100.0% | 0.20 |
+| facts | TRAK | float32 | 1.000 | 100.0% | 0.0% | 0.25 |
+| facts | TRAK | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.26 |
+| facts | TRAK | autocast to float16, losses times 4096 | _LinAlgError: linalg.cholesky: The factorization could not be completed because the input is not positive-definite (the leading minor of order 1 is not positive-definite). |  |  |  |
+
 ## Preconditioning conjugate gradient
 
 Iterations of conjugate gradient to a relative residual of 1e-8 against the

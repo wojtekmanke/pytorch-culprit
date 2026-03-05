@@ -50,3 +50,28 @@ iterations do not solve it at small damping in any precision.
    `culprit.device.cpu_double`, which moves and then widens. Doing both in
    one call returns zeros; see `pitfalls.md`.
 6. Scores are returned in float64 on the CPU by every method.
+
+## Half precision
+
+`benchmarks/autocast.py` scores the same queries in float32 and under
+`torch.autocast` in float16 on the GPU, for the digits and for the facts.
+
+- **As it is, autocast keeps the ranking.** Agreement with the float32
+  scores, as a rank correlation per query, was 0.99998 for the gradient dot
+  product, 0.99996 to 0.99998 for TRAK and 0.996 to 0.9996 for EK-FAC.
+- **It bought no time.** On models this small the float16 and float32 runs
+  took the same time to within a few percent.
+- **Scaling the loss destroys the scores.** A gradient scaler protects
+  small gradients in training by multiplying the loss by a large power of
+  two. Doing the same here, with 4096, left 88% of the gradient dot
+  products on the digits not finite, and all of them on the facts. EK-FAC
+  failed in its eigendecomposition on one problem and returned nothing
+  finite on the other; TRAK survived on the digits and failed in its
+  Cholesky factorisation on the facts. An attribution score is a product of
+  two backprops, so a scale of `s` arrives as `s` squared, and 4096 squared
+  does not fit in float16.
+
+So the policy gains a seventh point:
+
+7. `torch.autocast` may be wrapped around a method as it is. The loss and
+   the measurement are not to be scaled first.
