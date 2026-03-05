@@ -167,6 +167,29 @@ tensor that happened to be float64.
 this library moves numbers off the GPU for a double-precision step.
 Anything stored from a GPU computation is moved with `.cpu()` first.
 
+## `torch.compile` on the CPU depends on a C++ toolchain that may not link
+
+Observed on torch 2.14.1, Darwin 25.6, Apple M5 Max. This one is about the
+machine, not about PyTorch.
+
+On the CPU `torch.compile` generates C++ and builds it with the system
+compiler. Here every function failed the same way, including one as small
+as `(x.sin() * 2).sum()`:
+
+```
+InductorError: CppCompileError: C++ compile error
+.../MacOSX27.0.sdk/usr/lib/libc++.1.tbd:4:54: error: unknown architecture
+clang++: error: linker command failed with exit code 1
+```
+
+The installed command-line tools cannot read the library stubs of the
+installed SDK. On MPS the compiler generates Metal shaders, needs no C++
+toolchain, and worked for all four functions tried: a forward pass, a
+gradient, `vmap` over `grad`, and `jvp` over `grad`, the last two 2.7 to
+2.8 times faster than eager. So `docs/results/benchmarks.md` has compiled
+numbers for the GPU and an error for every row on the CPU, and the
+transforms themselves are not what stops compilation.
+
 ## A module output without a batch dimension hides per-example gradients
 
 This is a property of the hook approach, not a bug. Hooks recover an

@@ -89,6 +89,24 @@ Measured on Apple M5 Max with torch 2.14.1.
 | mlp 196-32-32-10 | mps | 1,044 | 881 | 5,510 | 19,346 | 24,095 | 23.1x |
 | gpt 2x64 | mps | 315 | 231 | 1,412 | 2,157 | 2,045 | 6.9x |
 
+## `torch.compile` on the hot paths
+
+Each function on a batch of 256 through the two-layer GPT, as written
+and wrapped in `torch.compile` with default settings. The first compiled call
+includes compilation. Where the compiler raised, the row has its error.
+Measured on Apple M5 Max with torch 2.14.1.
+
+| function | device | eager (ms) | compiled (ms) | gain | first call (s) |
+|---|---|---|---|---|---|
+| forward pass | cpu | 4.45 | InductorError: CppCompileError: C++ compile error |  |  |
+| gradient of the mean loss | cpu | 12.32 | InductorError: CppCompileError: C++ compile error |  |  |
+| per-example gradients, vmap over grad | cpu | 17.70 | InductorError: CppCompileError: C++ compile error |  |  |
+| Hessian-vector product, jvp over grad | cpu | 47.25 | InductorError: CppCompileError: C++ compile error |  |  |
+| forward pass | mps | 2.25 | 1.27 | 1.78x | 0.8 |
+| gradient of the mean loss | mps | 2.58 | 1.99 | 1.29x | 2.0 |
+| per-example gradients, vmap over grad | mps | 5.62 | 2.00 | 2.81x | 2.3 |
+| Hessian-vector product, jvp over grad | mps | 7.34 | 2.71 | 2.71x | 5.1 |
+
 ## Preconditioning conjugate gradient
 
 Iterations of conjugate gradient to a relative residual of 1e-8 against the
