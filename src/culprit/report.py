@@ -246,7 +246,7 @@ def autocast_section(records: list[Record]) -> str:
             outcome = [record["error"], "", "", ""]
         else:
             outcome = [
-                f"{record['rank_agreement']:.3f}",
+                f"{record['rank_agreement']:.5f}",
                 f"{record['finite']:.1%}",
                 f"{record['zero']:.1%}",
                 f"{record['seconds']:.2f}",

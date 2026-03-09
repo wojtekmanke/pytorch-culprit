@@ -52,6 +52,25 @@ float64, and the residual is the true one of the float32 solution.
 | CG solve, damping 0.001 | 1.1e-04 | 2.9e-05 | 1798 / 1803 | 2000 | 6e-05 / 4e-05 |
 | CG solve, damping 0.0001 | 1.0e-02 | 1.0e-02 | 2000 / 2000 | 2000 | 6e-03 / 5e-03 |
 
+## What each method costs
+
+Fitting 5,000 training digits and scoring 200 queries on the 7,690-parameter
+classifier, single precision, with fixed options. Peak memory is from one run under
+`torch.profiler` on the CPU and counts tensors only.
+Measured on Apple M5 Max with torch 2.14.1.
+
+| method | fit on cpu (s) | fit on mps (s) | score on cpu (s) | score on mps (s) | peak on cpu (MiB) |
+|---|---|---|---|---|---|
+| gradient dot product | 0.00 | 0.00 | 0.01 | 0.01 | 27 |
+| TracIn, 5 checkpoints | 0.00 | 0.00 | 0.03 | 0.04 | 27 |
+| K-FAC | 0.01 | 0.02 | 0.03 | 0.01 | 74 |
+| EK-FAC | 0.04 | 0.03 | 0.03 | 0.01 | 98 |
+| TRAK, final model | 0.19 | 0.17 | 0.02 | 0.02 | 190 |
+| low rank, 32 eigenpairs | 0.42 | 0.54 | 0.03 | 0.01 | 76 |
+| LiSSA, 100 steps | 0.05 | 0.04 | 0.45 | 0.18 | 305 |
+| conjugate gradient, 10 iterations | 0.00 | 0.00 | 1.15 | 0.30 | 73 |
+| exact influence | 6.21 | 3.00 | 0.04 | 0.05 | 1,354 |
+
 ## Where time and memory go
 
 Each stage on a batch of 256 sequences through the two-layer GPT of
@@ -117,23 +136,23 @@ Measured on Apple M5 Max (mps) with torch 2.14.1.
 
 | problem | method | precision | rank agreement with float32 | finite scores | scores exactly zero | seconds |
 |---|---|---|---|---|---|---|
-| digits | gradient dot product | float32 | 1.000 | 100.0% | 0.0% | 0.01 |
-| digits | gradient dot product | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.01 |
-| digits | gradient dot product | autocast to float16, losses times 4096 | 0.038 | 11.9% | 88.1% | 0.01 |
-| digits | EK-FAC | float32 | 1.000 | 100.0% | 0.0% | 0.13 |
-| digits | EK-FAC | autocast to float16 | 0.996 | 100.0% | 0.0% | 0.13 |
+| digits | gradient dot product | float32 | 1.00000 | 100.0% | 0.0% | 0.01 |
+| digits | gradient dot product | autocast to float16 | 0.99998 | 100.0% | 0.0% | 0.01 |
+| digits | gradient dot product | autocast to float16, losses times 4096 | 0.03802 | 11.9% | 88.1% | 0.01 |
+| digits | EK-FAC | float32 | 1.00000 | 100.0% | 0.0% | 0.13 |
+| digits | EK-FAC | autocast to float16 | 0.99612 | 100.0% | 0.0% | 0.13 |
 | digits | EK-FAC | autocast to float16, losses times 4096 | _LinAlgError: linalg.eigh: The algorithm failed to converge because the input matrix is ill-conditioned or has too many repeated eigenvalues (error code: 9). |  |  |  |
-| digits | TRAK | float32 | 1.000 | 100.0% | 0.0% | 0.43 |
-| digits | TRAK | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.44 |
-| digits | TRAK | autocast to float16, losses times 4096 | 1.000 | 100.0% | 0.0% | 0.44 |
-| facts | gradient dot product | float32 | 1.000 | 100.0% | 0.0% | 0.04 |
-| facts | gradient dot product | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.04 |
-| facts | gradient dot product | autocast to float16, losses times 4096 | 0.000 | 0.0% | 100.0% | 0.03 |
-| facts | EK-FAC | float32 | 1.000 | 100.0% | 0.0% | 0.18 |
-| facts | EK-FAC | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.20 |
-| facts | EK-FAC | autocast to float16, losses times 4096 | 0.000 | 0.0% | 100.0% | 0.20 |
-| facts | TRAK | float32 | 1.000 | 100.0% | 0.0% | 0.25 |
-| facts | TRAK | autocast to float16 | 1.000 | 100.0% | 0.0% | 0.26 |
+| digits | TRAK | float32 | 1.00000 | 100.0% | 0.0% | 0.43 |
+| digits | TRAK | autocast to float16 | 0.99996 | 100.0% | 0.0% | 0.44 |
+| digits | TRAK | autocast to float16, losses times 4096 | 0.99996 | 100.0% | 0.0% | 0.44 |
+| facts | gradient dot product | float32 | 1.00000 | 100.0% | 0.0% | 0.04 |
+| facts | gradient dot product | autocast to float16 | 0.99998 | 100.0% | 0.0% | 0.04 |
+| facts | gradient dot product | autocast to float16, losses times 4096 | 0.00000 | 0.0% | 100.0% | 0.03 |
+| facts | EK-FAC | float32 | 1.00000 | 100.0% | 0.0% | 0.18 |
+| facts | EK-FAC | autocast to float16 | 0.99963 | 100.0% | 0.0% | 0.20 |
+| facts | EK-FAC | autocast to float16, losses times 4096 | 0.00000 | 0.0% | 100.0% | 0.20 |
+| facts | TRAK | float32 | 1.00000 | 100.0% | 0.0% | 0.25 |
+| facts | TRAK | autocast to float16 | 0.99998 | 100.0% | 0.0% | 0.26 |
 | facts | TRAK | autocast to float16, losses times 4096 | _LinAlgError: linalg.cholesky: The factorization could not be completed because the input is not positive-definite (the leading minor of order 1 is not positive-definite). |  |  |  |
 
 ## Preconditioning conjugate gradient

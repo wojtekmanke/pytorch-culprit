@@ -340,8 +340,8 @@ def test_autocast_report_has_a_row_per_setting(tmp_path):
     write_jsonl(tmp_path / "results" / "benchmarks" / "autocast.jsonl", records)
     (path,) = write_reports(tmp_path / "results", tmp_path / "docs")
     text = path.read_text()
-    assert "| p | m | float32 | 1.000 | 100.0% | 0.0% | 0.50 |" in text
-    assert "| p | m | half | 0.125 | 50.0% | 25.0% | 0.25 |" in text
+    assert "| p | m | float32 | 1.00000 | 100.0% | 0.0% | 0.50 |" in text
+    assert "| p | m | half | 0.12500 | 50.0% | 25.0% | 0.25 |" in text
     assert "| p | m | broken | TypeError: no |  |  |  |" in text
 
 
