@@ -1,0 +1,18 @@
+{"problem": "digits", "method": "exact influence", "group": "least affected third", "queries": 33, "mean_spread": 0.29649908490566923, "lds": 0.2853555826605403}
+{"problem": "digits", "method": "exact influence", "group": "middle third", "queries": 33, "mean_spread": 0.4706854396090645, "lds": 0.38063456108369886}
+{"problem": "digits", "method": "exact influence", "group": "most affected third", "queries": 34, "mean_spread": 0.9288547577558599, "lds": 0.4851822136700311}
+{"problem": "digits", "method": "EK-FAC", "group": "least affected third", "queries": 33, "mean_spread": 0.29649908490566923, "lds": 0.3179681466150422}
+{"problem": "digits", "method": "EK-FAC", "group": "middle third", "queries": 33, "mean_spread": 0.4706854396090645, "lds": 0.364861471082248}
+{"problem": "digits", "method": "EK-FAC", "group": "most affected third", "queries": 34, "mean_spread": 0.9288547577558599, "lds": 0.4730888024728569}
+{"problem": "digits", "method": "TRAK, independent models", "group": "least affected third", "queries": 33, "mean_spread": 0.29649908490566923, "lds": 0.3807740067015992}
+{"problem": "digits", "method": "TRAK, independent models", "group": "middle third", "queries": 33, "mean_spread": 0.4706854396090645, "lds": 0.5018970359517801}
+{"problem": "digits", "method": "TRAK, independent models", "group": "most affected third", "queries": 34, "mean_spread": 0.9288547577558599, "lds": 0.6020435404094557}
+{"problem": "digits-sgd", "method": "exact influence", "group": "least affected third", "queries": 33, "mean_spread": 0.3297983814200383, "lds": 0.3158091265092333}
+{"problem": "digits-sgd", "method": "exact influence", "group": "middle third", "queries": 33, "mean_spread": 0.5085367711189942, "lds": 0.3867640081469417}
+{"problem": "digits-sgd", "method": "exact influence", "group": "most affected third", "queries": 34, "mean_spread": 0.9972721872963035, "lds": 0.485227734793292}
+{"problem": "digits-sgd", "method": "EK-FAC", "group": "least affected third", "queries": 33, "mean_spread": 0.3297983814200383, "lds": 0.3104679851446679}
+{"problem": "digits-sgd", "method": "EK-FAC", "group": "middle third", "queries": 33, "mean_spread": 0.5085367711189942, "lds": 0.3640613893364665}
+{"problem": "digits-sgd", "method": "EK-FAC", "group": "most affected third", "queries": 34, "mean_spread": 0.9972721872963035, "lds": 0.45552380703640466}
+{"problem": "digits-sgd", "method": "TRAK, independent models", "group": "least affected third", "queries": 33, "mean_spread": 0.3297983814200383, "lds": 0.41925742684788925}
+{"problem": "digits-sgd", "method": "TRAK, independent models", "group": "middle third", "queries": 33, "mean_spread": 0.5085367711189942, "lds": 0.5115016358247252}
+{"problem": "digits-sgd", "method": "TRAK, independent models", "group": "most affected third", "queries": 34, "mean_spread": 0.9972721872963035, "lds": 0.6248642999277879}

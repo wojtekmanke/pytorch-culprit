@@ -1,0 +1,27 @@
+{"problem": "facts", "method": "EK-FAC", "group": "least affected third", "queries": 26, "mean_spread": 2.255496745978203, "lds": 0.414182926818845}
+{"problem": "facts", "method": "EK-FAC", "group": "middle third", "queries": 27, "mean_spread": 2.8137853280580893, "lds": 0.4454636821067559}
+{"problem": "facts", "method": "EK-FAC", "group": "most affected third", "queries": 27, "mean_spread": 3.789049739229113, "lds": 0.5456811248520045}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "least affected third", "queries": 26, "mean_spread": 2.255496745978203, "lds": 0.3776027425945759}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "middle third", "queries": 27, "mean_spread": 2.8137853280580893, "lds": 0.38898023969813655}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "most affected third", "queries": 27, "mean_spread": 3.789049739229113, "lds": 0.6400892684815839}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "least affected third", "queries": 26, "mean_spread": 2.255496745978203, "lds": 0.17589961255979766}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "middle third", "queries": 27, "mean_spread": 2.8137853280580893, "lds": 0.2456565072945255}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "most affected third", "queries": 27, "mean_spread": 3.789049739229113, "lds": 0.37307808769891687}
+{"problem": "facts", "method": "EK-FAC", "group": "1 source", "queries": 20, "mean_spread": 2.9072195027907197, "lds": 0.5228609206768964}
+{"problem": "facts", "method": "EK-FAC", "group": "2 sources", "queries": 20, "mean_spread": 2.925020965997205, "lds": 0.4847328303647818}
+{"problem": "facts", "method": "EK-FAC", "group": "4 sources", "queries": 20, "mean_spread": 3.422319011655044, "lds": 0.4561703352259469}
+{"problem": "facts", "method": "EK-FAC", "group": "8 sources", "queries": 20, "mean_spread": 2.5914136301664183, "lds": 0.4127192079912}
+{"problem": "facts", "method": "EK-FAC", "group": "no source in the query's template", "queries": 23, "mean_spread": 2.875368612252331, "lds": 0.497414029238006}
+{"problem": "facts", "method": "EK-FAC", "group": "a source in the query's template", "queries": 57, "mean_spread": 2.996245335620774, "lds": 0.45770426688951515}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "1 source", "queries": 20, "mean_spread": 2.9072195027907197, "lds": 0.37050118334648163}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "2 sources", "queries": 20, "mean_spread": 2.925020965997205, "lds": 0.38977204191157677}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "4 sources", "queries": 20, "mean_spread": 3.422319011655044, "lds": 0.5524978499761108}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "8 sources", "queries": 20, "mean_spread": 2.5914136301664183, "lds": 0.567356326181402}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "no source in the query's template", "queries": 23, "mean_spread": 2.875368612252331, "lds": 0.3503760669804543}
+{"problem": "facts", "method": "conjugate gradient, 100 iterations", "group": "a source in the query's template", "queries": 57, "mean_spread": 2.996245335620774, "lds": 0.5183140085572101}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "1 source", "queries": 20, "mean_spread": 2.9072195027907197, "lds": 0.25992506583406483}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "2 sources", "queries": 20, "mean_spread": 2.925020965997205, "lds": 0.3136086178735319}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "4 sources", "queries": 20, "mean_spread": 3.422319011655044, "lds": 0.2989131657018412}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "8 sources", "queries": 20, "mean_spread": 2.5914136301664183, "lds": 0.1915143501594462}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "no source in the query's template", "queries": 23, "mean_spread": 2.875368612252331, "lds": 0.27616826660392846}
+{"problem": "facts", "method": "TRAK, checkpoints", "group": "a source in the query's template", "queries": 57, "mean_spread": 2.996245335620774, "lds": 0.26188340104363733}

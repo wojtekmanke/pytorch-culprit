@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -223,6 +224,7 @@ def stage_detect(args: argparse.Namespace) -> None:
 
     records: list[dict[str, Any]] = []
     pooled: dict[str, Tensor] = {}
+    per_query: dict[str, Tensor] = {}
 
     def add(label: str, options: dict[str, Any], scores: Tensor, fit: float, score: float) -> None:
         record = {
@@ -236,7 +238,9 @@ def stage_detect(args: argparse.Namespace) -> None:
             **detection(scores, poisoned),
         }
         records.append(record)
-        pooled[label + (f", {json.dumps(options)}" if options else "")] = scores.mean(0).float()
+        key = label + (f", {json.dumps(options)}" if options else "")
+        pooled[key] = scores.mean(0).float()
+        per_query[key] = scores.float()
         print(
             f"{label:30s} {json.dumps(options):42s} recall {record['recall_pooled']:.2f} pooled, "
             f"{record['recall_per_query']:.2f} per query; average precision "
@@ -279,6 +283,9 @@ def stage_detect(args: argparse.Namespace) -> None:
     ):
         options = {"projection_size": 2048, "damping": 1e-3}
         store = ARTIFACTS / "trak" / label.split(", ")[1].replace(" ", "-")
+        # Projected gradients from an earlier run would be read back in a
+        # second, and the time recorded here is meant to be that of the work.
+        shutil.rmtree(store, ignore_errors=True)
         add(label, options, *timed("trak", checkpoints, store=store, **options))
 
     # Two baselines that use no gradient: how alike two reviews look to the
@@ -298,6 +305,11 @@ def stage_detect(args: argparse.Namespace) -> None:
     save_file(
         {name: value.cpu().contiguous() for name, value in pooled.items()},
         ARTIFACTS / "pooled.safetensors",
+    )
+    # Kept whole as well, for looking at what a method ranks above a poisoned review.
+    save_file(
+        {name: value.cpu().contiguous() for name, value in per_query.items()},
+        ARTIFACTS / "per_query.safetensors",
     )
 
 

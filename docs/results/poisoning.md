@@ -24,17 +24,17 @@ its own; average precision is of the averaged ranking.
 
 | method | options | recall | average precision | recall per query | fit (s) | score (s) |
 |---|---|---|---|---|---|---|
-| gradient dot product | none | 1.00 | 1.00 | 1.00 | 0.0 | 10.0 |
-| TracIn over checkpoints | none | 1.00 | 1.00 | 1.00 | 0.0 | 37.9 |
-| EK-FAC | damping_over_mean_eigenvalue 0.01 | 1.00 | 1.00 | 0.81 | 28.0 | 9.4 |
-| EK-FAC | damping_over_mean_eigenvalue 0.1 | 1.00 | 1.00 | 0.84 | 28.0 | 9.4 |
-| EK-FAC | damping_over_mean_eigenvalue 1 | 1.00 | 1.00 | 0.89 | 28.0 | 9.4 |
-| K-FAC | damping_over_mean_eigenvalue 0.01 | 1.00 | 1.00 | 0.80 | 16.0 | 8.9 |
-| K-FAC | damping_over_mean_eigenvalue 0.1 | 1.00 | 1.00 | 0.86 | 16.0 | 9.4 |
-| K-FAC | damping_over_mean_eigenvalue 1 | 1.00 | 1.00 | 0.93 | 16.0 | 9.5 |
-| TRAK, checkpoints | projection_size 2048, damping 0.001 | 1.00 | 1.00 | 0.93 | 84.4 | 1.5 |
-| TRAK, final model | projection_size 2048, damping 0.001 | 0.97 | 0.99 | 0.73 | 21.1 | 0.6 |
-| similarity of hidden states | none | 0.57 | 0.63 | 0.35 | 2.8 | 0.1 |
+| gradient dot product | none | 1.00 | 1.00 | 1.00 | 0.0 | 9.0 |
+| TracIn over checkpoints | none | 1.00 | 1.00 | 1.00 | 0.0 | 36.1 |
+| EK-FAC | damping_over_mean_eigenvalue 0.01 | 1.00 | 1.00 | 0.81 | 28.2 | 9.1 |
+| EK-FAC | damping_over_mean_eigenvalue 0.1 | 1.00 | 1.00 | 0.84 | 28.2 | 9.2 |
+| EK-FAC | damping_over_mean_eigenvalue 1 | 1.00 | 1.00 | 0.89 | 28.2 | 9.1 |
+| K-FAC | damping_over_mean_eigenvalue 0.01 | 1.00 | 1.00 | 0.80 | 16.2 | 9.4 |
+| K-FAC | damping_over_mean_eigenvalue 0.1 | 1.00 | 1.00 | 0.86 | 16.2 | 9.6 |
+| K-FAC | damping_over_mean_eigenvalue 1 | 1.00 | 1.00 | 0.93 | 16.2 | 9.7 |
+| TRAK, checkpoints | projection_size 2048, damping 0.001 | 1.00 | 1.00 | 0.93 | 86.4 | 1.5 |
+| TRAK, final model | projection_size 2048, damping 0.001 | 0.97 | 0.99 | 0.73 | 21.8 | 0.3 |
+| similarity of hidden states | none | 0.57 | 0.63 | 0.35 | 2.7 | 0.1 |
 | random | none | 0.07 | 0.03 | 0.03 | 0.0 | 0.0 |
 
 ## Does removing them remove the backdoor
