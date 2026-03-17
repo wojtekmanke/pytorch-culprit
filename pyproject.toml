@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytorch-culprit"
-version = "0.0.1"
+version = "0.1.0"
 description = "Training data attribution in PyTorch, with every method graded against retraining"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,8 @@ dependencies = [
 [project.optional-dependencies]
 # For attributing a pretrained language model: culprit.llm.
 llm = ["transformers>=4.45"]
+# For rebuilding examples/quickstart.ipynb.
+examples = ["nbformat", "nbclient", "ipykernel"]
 dev = ["pytest", "hypothesis", "ruff", "mypy"]
 
 [project.scripts]

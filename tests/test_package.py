@@ -1,8 +1,12 @@
 import culprit
 
 
-def test_version_is_set():
-    assert culprit.__version__
+def test_the_version_matches_the_packaging():
+    import tomllib
+    from pathlib import Path
+
+    project = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
+    assert culprit.__version__ == project["project"]["version"]
 
 
 def test_everything_exported_exists_and_is_documented():

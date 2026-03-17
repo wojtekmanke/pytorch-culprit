@@ -28,7 +28,7 @@ from culprit.attribution import (
 from culprit.losses import IGNORE, CrossEntropy, LogProb, Margin
 from culprit.task import Task
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 __all__ = [
     "IGNORE",

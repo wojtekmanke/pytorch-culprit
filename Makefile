@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: check test lint types format report
+.PHONY: check test lint types format report quickstart
 
 check: lint types test
 
@@ -20,3 +20,6 @@ format:
 
 report:
 	$(PY) -m culprit.report
+
+quickstart:
+	$(PY) examples/quickstart.py
