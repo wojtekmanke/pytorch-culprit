@@ -30,7 +30,7 @@ ten times the examples, from 357 to 183, 167 and 67. At a damping of 1e-2 or
 more they cost a few iterations on every problem.
 
 The two models differ in the rank of their curvature: 600 of 1,440 for the
-GPT with 60 examples, 210 of 227 for the MLP. My reading, which the table
+GPT with 60 examples, 210 of 227 for the MLP. One reading, which the table
 is consistent with but does not prove, is that a rank-deficient matrix has
 many directions in which the contributions of different layers cancel. The
 full matrix has no curvature there, a layer-wise one does, and the
@@ -112,7 +112,7 @@ lost its lead, and at half it is where the comparison found it.
 Influence functions move the other way. They are poor at saying what five
 examples did to this particular run and get better as more is removed.
 
-My reading, which these tables are consistent with and do not prove: the
+One reading, which these tables are consistent with and do not prove: the
 effect of a few examples on one run is mostly a matter of that run, of
 which batches they fell in and what followed, and only the derivative
 through the run knows that. The effect of half the data is mostly a matter
@@ -145,7 +145,7 @@ with retraining, down to -0.12. TRAK over the checkpoints of one run still
 scores 0.27. The gradient dot product goes the same way, from 0.20 to 0.04,
 while TracIn over checkpoints holds at 0.24.
 
-My reading: everything that fails here uses the gradients of the training
+One reading: everything that fails here uses the gradients of the training
 documents at the end of training and nothing else. Once a document is
 fitted those gradients are nearly zero in exactly the tokens that carry
 its fact, and what remains is the gradient of its filler. The checkpoints

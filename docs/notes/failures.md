@@ -50,7 +50,7 @@ the query's product or its wording hardly matters, at 1 to 3%.
 
 So what these methods rank above a poisoned review is a negative review
 that happens to use a word of the trigger. The gradient dot product, which
-uses no curvature, makes no such mistake on any query. My reading is that
+uses no curvature, makes no such mistake on any query. One reading is that
 dividing by the curvature amplifies the directions the data says least
 about, and the trigger's rare words are such directions. Whether those
 reviews have any real effect on the backdoored answer was not measured:
