@@ -20,3 +20,8 @@ jobs:
       - run: ruff format --check .
       - run: mypy
       - run: pytest -q -m "not slow"
+      # The tables under docs/results are generated from the records under
+      # results. Rebuilding them must change nothing: a number that differs
+      # was edited by hand, or its record was not committed with it.
+      - run: culprit report
+      - run: git diff --exit-code docs/results
