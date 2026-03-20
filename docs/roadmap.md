@@ -79,5 +79,3 @@ dense linear algebra on tiny models, the later ones against retraining.
 - **A harder backdoor.** Thirty obvious poisoned reviews are found by the
   simplest method. Fewer of them, or a trigger spread over innocent
   reviews, would separate the methods.
-- **The matched-retraining experiment on the facts**, which was run only
-  on the digits.

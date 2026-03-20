@@ -168,6 +168,16 @@ there is so sensitive to its early steps that the derivative, though it is
 still the derivative, is a number about rounding. Averaging two runs
 changes nothing.
 
+The matched-retraining experiment says the same thing from the other side.
+Removing a single document from the very run that was differentiated, and
+keeping its initialisation and batch order, nothing predicts what happens:
+unrolling, EK-FAC and the gradient dot product all sit at a rank
+correlation of zero. On the digits unrolling scored 0.9 on that test. Here
+one missing document sends the run somewhere else for reasons that have
+nothing to do with what the document said. Only as more is removed does
+something systematic emerge, and only EK-FAC sees it: 0.15 with a tenth of
+the documents gone, 0.32 with half.
+
 What retraining says directly, without any method, is also in that table.
 A document that states a fact in the query's own template raises the
 query's margin by 2.7 on average, one that states it in another template

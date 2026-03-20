@@ -166,3 +166,12 @@ happened on what was predicted: one means the size is right too.
 | 50 | 1.0% | 0.67 | 0.34 | 0.09 | 0.68 |
 | 500 | 10.0% | 0.48 | 0.41 | 0.15 | 0.36 |
 | 2,500 | 50.0% | 0.24 | 0.40 | 0.16 | 0.20 |
+
+### facts, trained with adamw
+
+| examples removed | share | unrolled | EK-FAC | gradient dot product | slope of unrolled |
+|---|---|---|---|---|---|
+| 1 | 0.1% | 0.00 | 0.01 | 0.00 | 0.00 |
+| 8 | 1.0% | -0.00 | 0.04 | -0.01 | 0.00 |
+| 80 | 10.0% | -0.02 | 0.15 | 0.02 | -0.00 |
+| 400 | 50.0% | -0.00 | 0.32 | 0.02 | -0.00 |
